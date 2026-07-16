@@ -88,5 +88,10 @@ build = {
         ["jade.security"] = "src/jade/security/init.lua",
         ["jade.security.sanitizer"] = "src/jade/security/sanitizer.lua",
         ["jade.security.validator"] = "src/jade/security/validator.lua",
+
+        -- Introspection
+        ["jade.introspection"] = "src/jade/introspection/init.lua",
+        ["jade.introspection.reader"] = "src/jade/introspection/reader.lua",
+        ["jade.introspection.converter"] = "src/jade/introspection/converter.lua",
     }
 }

@@ -159,6 +159,7 @@ local test_files = {
     "security/sanitizer_spec.lua",
     "security/validator_spec.lua",
     "security/escape_spec.lua",
+    "introspection/converter_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")
