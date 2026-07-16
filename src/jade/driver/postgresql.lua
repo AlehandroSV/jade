@@ -12,23 +12,29 @@ function PostgreSQL.new()
     local self = Driver.new()
     setmetatable(self, PostgreSQL)
     self._conn = nil
+    self._config = nil
     return self
 end
 
 function PostgreSQL:connect(config)
-    local pg = pgmoon.new({
+    self._config = {
         host = config.host or "localhost",
         port = config.port or 5432,
         database = config.database,
         user = config.user or "postgres",
         password = config.password or ""
-    })
+    }
+    return self
+end
+
+function PostgreSQL:_ensureConnected()
+    if self._conn then return end
+    local pg = pgmoon.new(self._config)
     local ok, err = pg:connect()
     if not ok then
         error("Failed to connect to PostgreSQL: " .. tostring(err))
     end
     self._conn = pg
-    return self
 end
 
 function PostgreSQL:disconnect()
@@ -39,6 +45,7 @@ function PostgreSQL:disconnect()
 end
 
 function PostgreSQL:execute(sql, bindings)
+    self:_ensureConnected()
     if bindings and #bindings > 0 then
         local res, err = self._conn:query(sql, bindings)
         if not res then
