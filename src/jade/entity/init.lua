@@ -141,14 +141,18 @@ function Entity:update(id, data)
     local Condition = require("jade.query.condition")
     local where = Condition.new("id", "=", id, self._table)
     local sql, bindings = self._driver:generateUpdate(self._table, data, where)
-    return self._driver:execute(sql, bindings)
+    local result = self._driver:execute(sql, bindings)
+    local row = result[1] or result
+    return Instance.new(self, row)
 end
 
 function Entity:delete(id)
     local Condition = require("jade.query.condition")
     local where = Condition.new("id", "=", id, self._table)
     local sql, bindings = self._driver:generateDelete(self._table, where)
-    return self._driver:execute(sql, bindings)
+    local result = self._driver:execute(sql, bindings)
+    local row = result[1] or result
+    return Instance.new(self, row)
 end
 
 return Entity

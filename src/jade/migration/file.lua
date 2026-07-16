@@ -70,6 +70,8 @@ function M.listFiles()
 
     -- Sort by timestamp
     table.sort(files, function(a, b)
+        if not a.timestamp then return false end
+        if not b.timestamp then return true end
         return a.timestamp < b.timestamp
     end)
 

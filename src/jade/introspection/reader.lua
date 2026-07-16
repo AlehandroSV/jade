@@ -35,7 +35,7 @@ end
 function M.readColumns(driver, table_name)
     local columns = {}
 
-    local rows = driver:execute(string.format([[
+    local rows = driver:execute([[
         SELECT
             column_name,
             data_type,
@@ -45,10 +45,10 @@ function M.readColumns(driver, table_name)
             is_nullable,
             column_default
         FROM information_schema.columns
-        WHERE table_name = '%s'
+        WHERE table_name = $1
         AND table_schema = 'public'
         ORDER BY ordinal_position
-    ]], table_name))
+    ]], { table_name })
 
     for _, row in ipairs(rows) do
         local col = {
@@ -86,14 +86,14 @@ end
 function M.readIndexes(driver, table_name)
     local indexes = {}
 
-    local rows = driver:execute(string.format([[
+    local rows = driver:execute([[
         SELECT
             indexname,
             indexdef
         FROM pg_indexes
-        WHERE tablename = '%s'
+        WHERE tablename = $1
         AND schemaname = 'public'
-    ]], table_name))
+    ]], { table_name })
 
     for _, row in ipairs(rows) do
         -- Skip primary key indexes (they're handled by column definition)
@@ -113,7 +113,7 @@ end
 function M.readForeignKeys(driver, table_name)
     local foreign_keys = {}
 
-    local rows = driver:execute(string.format([]
+    local rows = driver:execute([[
         SELECT
             tc.constraint_name,
             kcu.column_name,
@@ -125,9 +125,9 @@ function M.readForeignKeys(driver, table_name)
         JOIN information_schema.constraint_column_usage AS ccu
             ON ccu.constraint_name = tc.constraint_name
         WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_name = '%s'
+        AND tc.table_name = $1
         AND tc.table_schema = 'public'
-    ]], table_name))
+    ]], { table_name })
 
     for _, row in ipairs(rows) do
         foreign_keys[row.constraint_name] = {

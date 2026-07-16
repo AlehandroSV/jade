@@ -10,7 +10,11 @@ function M.sql(sql, bindings)
     if debug_mode then
         print("[SQL] " .. sql)
         if bindings and #bindings > 0 then
-            print("[BINDINGS] " .. table.concat(bindings, ", "))
+            local parts = {}
+            for _, v in ipairs(bindings) do
+                parts[#parts + 1] = tostring(v)
+            end
+            print("[BINDINGS] " .. table.concat(parts, ", "))
         end
     end
 end

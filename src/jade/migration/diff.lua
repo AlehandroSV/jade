@@ -10,13 +10,23 @@ function M.compare(current_schema, desired_schema)
     }
 
     local current_tables = {}
-    for _, tbl in ipairs(current_schema.tables or {}) do
-        current_tables[tbl.name] = tbl
+    for key, tbl in pairs(current_schema.tables or {}) do
+        if type(key) == "number" then
+            -- Array format: { { name = "users", ... }, ... }
+            current_tables[tbl.name] = tbl
+        else
+            -- Hash format: { users = { name = "users", ... }, ... }
+            current_tables[key] = tbl
+        end
     end
 
     local desired_tables = {}
-    for _, tbl in ipairs(desired_schema.tables or {}) do
-        desired_tables[tbl.name] = tbl
+    for key, tbl in pairs(desired_schema.tables or {}) do
+        if type(key) == "number" then
+            desired_tables[tbl.name] = tbl
+        else
+            desired_tables[key] = tbl
+        end
     end
 
     -- Find tables to create
@@ -38,13 +48,21 @@ function M.compare(current_schema, desired_schema)
         local current_tbl = current_tables[name]
         if current_tbl then
             local current_cols = {}
-            for _, col in ipairs(current_tbl.columns or {}) do
-                current_cols[col.name] = col
+            for key, col in pairs(current_tbl.columns or {}) do
+                if type(key) == "number" then
+                    current_cols[col.name] = col
+                else
+                    current_cols[key] = col
+                end
             end
 
             local desired_cols = {}
-            for _, col in ipairs(desired_tbl.columns or {}) do
-                desired_cols[col.name] = col
+            for key, col in pairs(desired_tbl.columns or {}) do
+                if type(key) == "number" then
+                    desired_cols[col.name] = col
+                else
+                    desired_cols[key] = col
+                end
             end
 
             -- Find columns to add

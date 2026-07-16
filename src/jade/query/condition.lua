@@ -68,6 +68,12 @@ function Condition:compile(bindings)
     else
         col_ref = self.column
     end
+
+    -- Special handling for IS NULL / IS NOT NULL
+    if self.op == "IS" or self.op == "IS NOT" then
+        return col_ref .. " " .. self.op .. " NULL", bindings
+    end
+
     bindings[#bindings + 1] = self.value
     return col_ref .. " " .. self.op .. " ?", bindings
 end

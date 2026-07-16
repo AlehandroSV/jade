@@ -74,16 +74,26 @@ function Query:get()
 end
 
 function Query:first()
-    self._limit = 1
-    local results = self:get()
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._orderBy = self._orderBy
+    q._select = self._select
+    q._includes = self._includes
+    q._limit = 1
+    q._offset = self._offset
+    local results = q:get()
     return results[1]
 end
 
 function Query:find(id)
-    self._where = {}
-    self._where[1] = Condition.new("id", "=", id, self._table)
-    self._limit = 1
-    local results = self:get()
+    local q = Query.new(self._entity)
+    q._where = { Condition.new("id", "=", id, self._table) }
+    q._orderBy = self._orderBy
+    q._select = self._select
+    q._includes = self._includes
+    q._limit = 1
+    q._offset = self._offset
+    local results = q:get()
     return results[1]
 end
 

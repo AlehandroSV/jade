@@ -134,7 +134,9 @@ function M.status(driver)
         end
     end
 
-    print("Applied: " .. tostring(#applied))
+    local applied_count = 0
+    for _ in pairs(applied) do applied_count = applied_count + 1 end
+    print("Applied: " .. tostring(applied_count))
     print("Pending: " .. tostring(#pending))
 
     if #pending > 0 then
