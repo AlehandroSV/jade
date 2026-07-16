@@ -14,23 +14,23 @@ function Condition.new(column, op, value, table_name)
 end
 
 function Condition:band(other)
-    local self = {
+    local composite = {
         left = self,
         right = other,
         type = "and",
     }
-    setmetatable(self, Condition)
-    return self
+    setmetatable(composite, Condition)
+    return composite
 end
 
 function Condition:bor(other)
-    local self = {
+    local composite = {
         left = self,
         right = other,
         type = "or",
     }
-    setmetatable(self, Condition)
-    return self
+    setmetatable(composite, Condition)
+    return composite
 end
 
 function Condition:compile(bindings)
@@ -72,6 +72,16 @@ function Condition:compile(bindings)
     -- Special handling for IS NULL / IS NOT NULL
     if self.op == "IS" or self.op == "IS NOT" then
         return col_ref .. " " .. self.op .. " NULL", bindings
+    end
+
+    -- Special handling for IN clause
+    if self.op == "IN" then
+        local placeholders = {}
+        for i = 1, #self.value do
+            placeholders[i] = "?"
+            bindings[#bindings + 1] = self.value[i]
+        end
+        return col_ref .. " IN (" .. table.concat(placeholders, ", ") .. ")", bindings
     end
 
     bindings[#bindings + 1] = self.value

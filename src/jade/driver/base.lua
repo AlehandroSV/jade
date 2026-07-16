@@ -10,6 +10,11 @@ Driver.__index = Driver
 -- generateUpdate(table_name, data, where) -> sql, bindings
 -- generateDelete(table_name, where) -> sql, bindings
 -- mapType(column_type) -> db_type_string
+-- getConnection() -> connection
+-- beginTransaction(conn)
+-- commitTransaction(conn)
+-- rollbackTransaction(conn)
+-- executeWithConnection(conn, sql, bindings)
 
 function Driver.new()
     return setmetatable({}, Driver)
@@ -45,6 +50,26 @@ end
 
 function Driver:mapType(column_type)
     error("Driver:mapType() not implemented")
+end
+
+function Driver:getConnection()
+    error("Driver:getConnection() not implemented")
+end
+
+function Driver:beginTransaction(conn)
+    error("Driver:beginTransaction() not implemented")
+end
+
+function Driver:commitTransaction(conn)
+    error("Driver:commitTransaction() not implemented")
+end
+
+function Driver:rollbackTransaction(conn)
+    error("Driver:rollbackTransaction() not implemented")
+end
+
+function Driver:executeWithConnection(conn, sql, bindings)
+    error("Driver:executeWithConnection() not implemented")
 end
 
 return Driver

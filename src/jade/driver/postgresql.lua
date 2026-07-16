@@ -44,6 +44,53 @@ function PostgreSQL:disconnect()
     end
 end
 
+-- Transaction methods
+function PostgreSQL:getConnection()
+    local pg = pgmoon.new(self._config)
+    local ok, err = pg:connect()
+    if not ok then
+        error("Failed to connect to PostgreSQL: " .. tostring(err))
+    end
+    return pg
+end
+
+function PostgreSQL:beginTransaction(conn)
+    local res, err = conn:query("BEGIN")
+    if not res then
+        error("Failed to begin transaction: " .. tostring(err))
+    end
+end
+
+function PostgreSQL:commitTransaction(conn)
+    local res, err = conn:query("COMMIT")
+    if not res then
+        error("Failed to commit transaction: " .. tostring(err))
+    end
+end
+
+function PostgreSQL:rollbackTransaction(conn)
+    local res, err = conn:query("ROLLBACK")
+    if not res then
+        error("Failed to rollback transaction: " .. tostring(err))
+    end
+end
+
+function PostgreSQL:executeWithConnection(conn, sql, bindings)
+    if bindings and #bindings > 0 then
+        local res, err = conn:query(sql, table.unpack(bindings))
+        if not res then
+            error("Query failed: " .. tostring(err))
+        end
+        return res
+    else
+        local res, err = conn:query(sql)
+        if not res then
+            error("Query failed: " .. tostring(err))
+        end
+        return res
+    end
+end
+
 function PostgreSQL:execute(sql, bindings)
     self:_ensureConnected()
     if bindings and #bindings > 0 then

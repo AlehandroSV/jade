@@ -100,7 +100,11 @@ function M.validateType(value, expected_type)
     end
 
     if lua_type == "number" then
-        return type(value) == "number" and value == math.floor(value)
+        -- Integer type requires whole number, float/decimal accept any number
+        if expected_type == "integer" then
+            return type(value) == "number" and value == math.floor(value)
+        end
+        return type(value) == "number"
     end
 
     return type(value) == lua_type

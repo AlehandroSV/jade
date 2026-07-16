@@ -98,24 +98,42 @@ function Query:find(id)
 end
 
 function Query:count()
-    self._select = { "COUNT(*) as count" }
-    local sql, bindings = self:toSQL()
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._orderBy = self._orderBy
+    q._select = { "COUNT(*) as count" }
+    q._includes = self._includes
+    q._limit = self._limit
+    q._offset = self._offset
+    local sql, bindings = q:toSQL()
     local driver = self._entity._driver
     local result = driver:execute(sql, bindings)
     return result[1] and result[1].count or 0
 end
 
 function Query:sum(column)
-    self._select = { "SUM(" .. column .. ") as sum" }
-    local sql, bindings = self:toSQL()
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._orderBy = self._orderBy
+    q._select = { "SUM(" .. column .. ") as sum" }
+    q._includes = self._includes
+    q._limit = self._limit
+    q._offset = self._offset
+    local sql, bindings = q:toSQL()
     local driver = self._entity._driver
     local result = driver:execute(sql, bindings)
     return result[1] and result[1].sum or 0
 end
 
 function Query:average(column)
-    self._select = { "AVG(" .. column .. ") as avg" }
-    local sql, bindings = self:toSQL()
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._orderBy = self._orderBy
+    q._select = { "AVG(" .. column .. ") as avg" }
+    q._includes = self._includes
+    q._limit = self._limit
+    q._offset = self._offset
+    local sql, bindings = q:toSQL()
     local driver = self._entity._driver
     local result = driver:execute(sql, bindings)
     return result[1] and result[1].avg or 0
