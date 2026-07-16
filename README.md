@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[![Português](https://img.shields.io/badge/Português-readme-blue)](#pt-br)
+[![Portugues](https://img.shields.io/badge/Portugu%C3%AAs-readme-blue)](#pt-br)
 [![English](https://img.shields.io/badge/English-readme-green)](#en)
 
 ---
@@ -15,22 +15,22 @@
 
 Jade is a modern ORM/Data Mapper for Lua that offers a modern development experience, including declarative schema, automatic migrations, query builder, relations, validations, callbacks, and more.
 
-**We don't hide SQL** — every operation can be viewed and audited.
+**We don't hide SQL** - every operation can be viewed and audited.
 
 ### Features
 
-- **Declarative Schema** — Define entities in Lua
-- **Query Builder** — Chainable queries with JOINs, GROUP BY, HAVING, DISTINCT
-- **Relations** — belongsTo, hasMany, hasOne, hasAndBelongsToMany, hasManyThrough
-- **Eager Loading** — Load relations in batch with `include()`
-- **Validations** — presence, uniqueness, length, format, inclusion, numericality, custom
-- **Callbacks** — before/after/around hooks for create, update, delete, save
-- **Migrations** — Automatic database management with DDL operations
-- **Transactions** — Support for transactions with commit/rollback
-- **Soft Delete** — Logical deletion with deleted_at
-- **Connection Pooling** — Configurable connection pool
-- **Security** — SQL injection detection, input validation
-- **i18n** — Internationalization (English, Portuguese)
+- **Declarative Schema** - Define entities in Lua
+- **Query Builder** - Chainable queries with JOINs, GROUP BY, HAVING, DISTINCT
+- **Relations** - belongsTo, hasMany, hasOne, hasAndBelongsToMany, hasManyThrough
+- **Eager Loading** - Load relations in batch with `include()`
+- **Validations** - presence, uniqueness, length, format, inclusion, numericality, custom
+- **Callbacks** - before/after/around hooks for create, update, delete, save
+- **Migrations** - Automatic database management with DDL operations
+- **Transactions** - Support for transactions with commit/rollback
+- **Soft Delete** - Logical deletion with deleted_at
+- **Connection Pooling** - Configurable connection pool
+- **Security** - SQL injection detection, input validation
+- **i18n** - Internationalization (English, Portuguese)
 
 ### Installation
 
@@ -314,10 +314,6 @@ jade.Boolean():default(true)  -- DEFAULT
 jade.Timestamp():defaultNow() -- DEFAULT CURRENT_TIMESTAMP
 ```
 
-### Contributing
-
-Contributions are welcome! Please see CONTRIBUTING.md for details.
-
 ### License
 
 MIT
@@ -328,26 +324,26 @@ MIT
 
 ### Sobre
 
-Jade é um ORM/Data Mapper moderno para Lua que oferece uma experiência moderna de desenvolvimento, incluindo schema declarativo, migrations automáticas, query builder, relações, validações, callbacks e muito mais.
+Jade e um ORM/Data Mapper moderno para Lua que oferece uma experiencia moderna de desenvolvimento, incluindo schema declarativo, migrations automaticas, query builder, relacoes, validacoes, callbacks e muito mais.
 
-**Não escondemos o SQL** — toda operação pode ser visualizada e auditada.
+**Nao escondemos o SQL** - toda operacao pode ser visualizada e auditada.
 
 ### Features
 
-- **Schema Declarativo** — Defina entidades em Lua
-- **Query Builder** — Consultas chainable com JOINs, GROUP BY, HAVING, DISTINCT
-- **Relações** — belongsTo, hasMany, hasOne, hasAndBelongsToMany, hasManyThrough
-- **Eager Loading** — Carregue relações em batch com `include()`
-- **Validações** — presence, uniqueness, length, format, inclusion, numericality, custom
-- **Callbacks** — Hooks before/after/around para create, update, delete, save
-- **Migrations** — Gerenciamento automático do banco com operações DDL
-- **Transactions** — Suporte a transações com commit/rollback
-- **Soft Delete** — Exclusão lógica com deleted_at
-- **Connection Pooling** — Pool de conexões configurável
-- **Segurança** — Detecção de SQL injection, validação de entrada
-- **i18n** — Internacionalização (Inglês, Português)
+- **Schema Declarativo** - Defina entidades em Lua
+- **Query Builder** - Consultas chainable com JOINs, GROUP BY, HAVING, DISTINCT
+- **Relacoes** - belongsTo, hasMany, hasOne, hasAndBelongsToMany, hasManyThrough
+- **Eager Loading** - Carregue relacoes em batch com `include()`
+- **Validacoes** - presence, uniqueness, length, format, inclusion, numericality, custom
+- **Callbacks** - Hooks before/after/around para create, update, delete, save
+- **Migrations** - Gerenciamento automatico do banco com operacoes DDL
+- **Transactions** - Suporte a transacoes com commit/rollback
+- **Soft Delete** - Exclusao logica com deleted_at
+- **Connection Pooling** - Pool de conexoes configuravel
+- **Seguranca** - Deteccao de SQL injection, validacao de entrada
+- **i18n** - Internacionalizacao (Ingles, Portugues)
 
-### Instalação
+### Instalacao
 
 ```bash
 luarocks install jade
@@ -358,7 +354,7 @@ luarocks install jade
 ```lua
 local jade = require("jade")
 
--- Configurar conexão
+-- Configurar conexao
 jade.configure({
     database = {
         driver = "postgresql",
@@ -411,27 +407,27 @@ User:select("department", "COUNT(*) as count"):groupBy("department"):get()
 -- DISTINCT
 User:distinct():get()
 
--- Agregações
+-- Agregacoes
 User:count()
 User:sum("age")
 User:average("age")
 User:min("age")
 User:max("age")
 
--- Paginação
+-- Paginacao
 User:paginate({ page = 2, perPage = 20 })
 ```
 
 ### Operadores
 
 ```lua
--- Comparação
-User:where(User.name:eq("João")):get()
+-- Comparacao
+User:where(User.name:eq("Joao")):get()
 User:where(User.age:gt(18)):get()
 
--- Padrões
-User:where(User.name:like("%João%")):get()
-User:where(User.name:ilike("%joão%")):get()  -- Case-insensitive
+-- Padroes
+User:where(User.name:like("%Joao%")):get()
+User:where(User.name:ilike("%joao%")):get()  -- Case-insensitive
 
 -- Conjuntos
 User:where(User.id:isIn({1, 2, 3})):get()
@@ -444,7 +440,7 @@ User:where(User.deleted_at:isNull()):get()
 User:where(User.age:between(18, 65)):get()
 ```
 
-### Relações
+### Relacoes
 
 ```lua
 local Post = jade.Entity("posts", {
@@ -453,7 +449,7 @@ local Post = jade.Entity("posts", {
     user_id = jade.Integer(),
 })
 
--- Definir relações
+-- Definir relacoes
 Post:belongsTo(User)
 User:hasMany(Post)
 User:hasOne(Profile)
@@ -468,10 +464,10 @@ local posts = user.posts:load()
 local users = User:include("posts"):get()
 ```
 
-### Validações
+### Validacoes
 
 ```lua
--- Adicionar validações
+-- Adicionar validacoes
 User:validatePresenceOf("name")
 User:validateUniquenessOf("email")
 User:validateLengthOf("name", { min = 2, max = 100 })
@@ -482,8 +478,8 @@ User:validateNumericalityOf("age", { integer_only = true })
 -- Validar manualmente
 local errors = User:validate(data)
 
--- Validações rodam automaticamente em create/update
-User:create({ name = "" })  -- Lança erro de validação
+-- Validacoes rodam automaticamente em create/update
+User:create({ name = "" })  -- Lanca erro de validacao
 ```
 
 ### Callbacks
@@ -495,7 +491,7 @@ User:beforeCreate(function(instance, data)
 end)
 
 User:afterCreate(function(instance, data)
-    print("Usuário criado: " .. instance.name)
+    print("Usuario criado: " .. instance.name)
 end)
 
 User:beforeSave(function(instance, data)
@@ -514,20 +510,20 @@ jade.createTable("users", function(t)
     t:timestamps()
 end)
 
--- Outras operações DDL
+-- Outras operacoes DDL
 jade.dropTable("users")
 jade.addColumn("users", "phone", "string", { length = 20 })
 jade.addIndex("users", "email", { unique = true })
 ```
 
-### Transações
+### Transacoes
 
 ```lua
 jade.transaction.run(jade.driver(), function(tx)
     local user = User:create({ name = "Lucas" })
-    Post:create({ title = "Olá", user_id = user.id })
+    Post:create({ title = "Ola", user_id = user.id })
 end)
--- Auto-commit se não houver erro, rollback se houver
+-- Auto-commit se nao houver erro, rollback se houver
 ```
 
 ### Soft Delete
@@ -535,17 +531,17 @@ end)
 ```lua
 jade.SoftDelete.setup(User)
 
--- Delete agora é soft delete
+-- Delete agora e soft delete
 User:delete(id)              -- Seta deleted_at
 
--- Métodos adicionais
+-- Metodos adicionais
 User:forceDelete(id)         -- Delete real
 User:withTrashed():get()     -- Inclui deletados
 User:onlyTrashed():get()     -- Apenas deletados
 User:restore(id)             -- Restaura
 ```
 
-### Pool de Conexões
+### Pool de Conexoes
 
 ```lua
 jade.configure({
@@ -553,8 +549,8 @@ jade.configure({
         driver = "postgresql",
         host = "localhost",
         database = "myapp",
-        pool_size = 10,      -- Máximo de conexões
-        pool_min = 2,        -- Mínimo de conexões idle
+        pool_size = 10,      -- Maximo de conexoes
+        pool_min = 2,        -- Minimo de conexoes idle
         pool_timeout = 300   -- Timeout idle (segundos)
     }
 })
@@ -565,8 +561,8 @@ jade.configure({
 ```lua
 local jade = require("jade")
 jade.migration.init(driver)      -- Cria tabela tracker
-jade.migration.migrate(driver)   -- Roda migrações pendentes
-jade.migration.rollback(driver)  -- Desfaz última migração
+jade.migration.migrate(driver)   -- Roda migracoes pendentes
+jade.migration.rollback(driver)  -- Desfaz ultima migracao
 jade.migration.preview(driver)   -- Mostra pendentes
 jade.migration.status(driver)    -- Resumo geral
 ```
@@ -595,10 +591,6 @@ jade.Boolean():default(true)  -- DEFAULT
 jade.Timestamp():defaultNow() -- DEFAULT CURRENT_TIMESTAMP
 ```
 
-### Contribuindo
-
-Contribuições são bem-vindas! Veja CONTRIBUTING.md para detalhes.
-
-### Licença
+### Licenca
 
 MIT
