@@ -1,8 +1,8 @@
 package = "jade"
 version = "scm-1"
 source = {
-    url = "git://github.com/AlehandroSV/Jade.git",
-    dir = "Jade"
+    url = "git://github.com/AlehandroSV/jade.git",
+    dir = "jade"
 }
 description = {
     summary = "Um ORM moderno para Lua",
@@ -11,7 +11,7 @@ description = {
         Features: schema declarativo, migrations automaticas,
         query builder, relacoes, paginacao, transactions e soft delete.
     ]],
-    homepage = "https://github.com/AlehandroSV/Jade",
+    homepage = "https://github.com/AlehandroSV/jade",
     license = "MIT"
 }
 dependencies = {
