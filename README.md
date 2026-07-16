@@ -27,7 +27,6 @@ Jade is a modern ORM/Data Mapper for Lua that offers a modern development experi
 - **Transactions** — Support for transactions with commit/rollback
 - **Soft Delete** — Logical deletion with deleted_at
 - **Multi-database** — PostgreSQL (MySQL and SQLite coming soon)
-- **i18n** — English and Portuguese (Brazil)
 
 ### Installation
 
@@ -246,7 +245,6 @@ Jade é um ORM/Data Mapper para Lua que oferece uma experiência moderna de dese
 - **Transactions** — Suporte a transações com commit/rollback
 - **Soft Delete** — Exclusão lógica com deleted_at
 - **Multi-database** — PostgreSQL (MySQL e SQLite em breve)
-- **i18n** — Inglês e Português (Brasil)
 
 ### Instalação
 
