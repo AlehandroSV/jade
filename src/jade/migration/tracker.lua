@@ -1,3 +1,4 @@
+local Jade = require("jade")
 local M = {}
 
 function M.createTrackerTable(driver)
@@ -5,10 +6,19 @@ function M.createTrackerTable(driver)
         CREATE TABLE IF NOT EXISTS _jade_migrations (
             id SERIAL PRIMARY KEY,
             name VARCHAR(255) UNIQUE NOT NULL,
+            jade_version VARCHAR(20),
             applied_at TIMESTAMPTZ DEFAULT NOW()
         )
     ]]
-    return driver:execute(sql)
+    driver:execute(sql)
+
+    -- Add jade_version column if it doesn't exist (migration for existing tables)
+    local check = driver:execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = '_jade_migrations' AND column_name = 'jade_version'"
+    )
+    if #check == 0 then
+        driver:execute("ALTER TABLE _jade_migrations ADD COLUMN jade_version VARCHAR(20)")
+    end
 end
 
 function M.getAppliedMigrations(driver)
@@ -22,8 +32,9 @@ function M.getAppliedMigrations(driver)
 end
 
 function M.recordMigration(driver, name)
-    local sql = "INSERT INTO _jade_migrations (name) VALUES (?)"
-    return driver:execute(sql, { name })
+    local version = Jade._VERSION or "unknown"
+    local sql = "INSERT INTO _jade_migrations (name, jade_version) VALUES (?, ?)"
+    return driver:execute(sql, { name, version })
 end
 
 function M.removeMigration(driver, name)
