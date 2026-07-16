@@ -84,6 +84,30 @@ function Condition:compile(bindings)
         return col_ref .. " IN (" .. table.concat(placeholders, ", ") .. ")", bindings
     end
 
+    -- Special handling for NOT IN clause
+    if self.op == "NOT IN" then
+        local placeholders = {}
+        for i = 1, #self.value do
+            placeholders[i] = "?"
+            bindings[#bindings + 1] = self.value[i]
+        end
+        return col_ref .. " NOT IN (" .. table.concat(placeholders, ", ") .. ")", bindings
+    end
+
+    -- Special handling for BETWEEN
+    if self.op == "BETWEEN" then
+        bindings[#bindings + 1] = self.value[1]
+        bindings[#bindings + 1] = self.value[2]
+        return col_ref .. " BETWEEN ? AND ?", bindings
+    end
+
+    -- Special handling for NOT BETWEEN
+    if self.op == "NOT BETWEEN" then
+        bindings[#bindings + 1] = self.value[1]
+        bindings[#bindings + 1] = self.value[2]
+        return col_ref .. " NOT BETWEEN ? AND ?", bindings
+    end
+
     bindings[#bindings + 1] = self.value
     return col_ref .. " " .. self.op .. " ?", bindings
 end

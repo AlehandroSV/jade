@@ -65,4 +65,50 @@ function Relations.belongsTo(target_entity, options)
     }
 end
 
+function Relations.hasAndBelongsToMany(source_entity, target_entity, options)
+    options = options or {}
+    local inflection = require("jade.util.inflection")
+
+    local join_table = options.join_table
+    if not join_table then
+        -- Convention: alphabetical order of table names
+        local tables = { source_entity._table, target_entity._table }
+        table.sort(tables)
+        join_table = tables[1] .. "_" .. tables[2]
+    end
+
+    local source_key = options.source_key or "id"
+    local target_key = options.target_key or "id"
+    local source_foreign_key = options.source_foreign_key or (inflection.singularize(source_entity._table) .. "_id")
+    local target_foreign_key = options.target_foreign_key or (inflection.singularize(target_entity._table) .. "_id")
+
+    return {
+        type = "hasAndBelongsToMany",
+        source = source_entity,
+        target = target_entity,
+        join_table = join_table,
+        source_key = source_key,
+        target_key = target_key,
+        source_foreign_key = source_foreign_key,
+        target_foreign_key = target_foreign_key,
+    }
+end
+
+function Relations.hasManyThrough(source_entity, target_entity, through_entity, options)
+    options = options or {}
+    local inflection = require("jade.util.inflection")
+
+    local source_foreign_key = options.source_foreign_key or (inflection.singularize(source_entity._table) .. "_id")
+    local target_foreign_key = options.target_foreign_key or (inflection.singularize(target_entity._table) .. "_id")
+
+    return {
+        type = "hasManyThrough",
+        source = source_entity,
+        target = target_entity,
+        through = through_entity,
+        source_foreign_key = source_foreign_key,
+        target_foreign_key = target_foreign_key,
+    }
+end
+
 return Relations

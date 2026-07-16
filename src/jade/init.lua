@@ -36,6 +36,9 @@ Jade.SoftDelete = require("jade.entity.soft_delete")
 -- Security
 Jade.security = require("jade.security")
 
+-- Schema (DDL operations)
+Jade.Schema = require("jade.schema")
+
 -- Driver registry
 Jade.drivers = require("jade.driver")
 
@@ -85,6 +88,47 @@ end
 
 function Jade.raw(sql, ...)
     return { _raw = sql, _bindings = { ... } }
+end
+
+-- DDL shortcuts (delegate to Schema module with current driver)
+function Jade.createTable(name, fn)
+    return Jade.Schema.createTable(Jade.driver(), name, fn)
+end
+
+function Jade.dropTable(name)
+    return Jade.Schema.dropTable(Jade.driver(), name)
+end
+
+function Jade.renameTable(old_name, new_name)
+    return Jade.Schema.renameTable(Jade.driver(), old_name, new_name)
+end
+
+function Jade.addColumn(table_name, column_name, type_name, options)
+    return Jade.Schema.addColumn(Jade.driver(), table_name, column_name, type_name, options)
+end
+
+function Jade.dropColumn(table_name, column_name)
+    return Jade.Schema.dropColumn(Jade.driver(), table_name, column_name)
+end
+
+function Jade.renameColumn(table_name, old_name, new_name)
+    return Jade.Schema.renameColumn(Jade.driver(), table_name, old_name, new_name)
+end
+
+function Jade.addIndex(table_name, columns, options)
+    return Jade.Schema.addIndex(Jade.driver(), table_name, columns, options)
+end
+
+function Jade.dropIndex(table_name, index_name)
+    return Jade.Schema.dropIndex(Jade.driver(), table_name, index_name)
+end
+
+function Jade.addForeignKey(table_name, options)
+    return Jade.Schema.addForeignKey(Jade.driver(), table_name, options)
+end
+
+function Jade.dropForeignKey(table_name, constraint_name)
+    return Jade.Schema.dropForeignKey(Jade.driver(), table_name, constraint_name)
 end
 
 -- Shorthand Entity constructor that auto-configures the driver

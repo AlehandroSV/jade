@@ -49,9 +49,34 @@ function Expression:like(value)
     return Condition.new(self._column, "LIKE", value, self._table)
 end
 
+function Expression:notLike(value)
+    local Condition = require("jade.query.condition")
+    return Condition.new(self._column, "NOT LIKE", value, self._table)
+end
+
+function Expression:ilike(value)
+    local Condition = require("jade.query.condition")
+    return Condition.new(self._column, "ILIKE", value, self._table)
+end
+
 function Expression:isIn(values)
     local Condition = require("jade.query.condition")
     return Condition.new(self._column, "IN", values, self._table)
+end
+
+function Expression:notIn(values)
+    local Condition = require("jade.query.condition")
+    return Condition.new(self._column, "NOT IN", values, self._table)
+end
+
+function Expression:between(min, max)
+    local Condition = require("jade.query.condition")
+    return Condition.new(self._column, "BETWEEN", {min, max}, self._table)
+end
+
+function Expression:notBetween(min, max)
+    local Condition = require("jade.query.condition")
+    return Condition.new(self._column, "NOT BETWEEN", {min, max}, self._table)
 end
 
 function Expression:isNull()

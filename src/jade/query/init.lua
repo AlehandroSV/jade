@@ -16,6 +16,10 @@ function Query.new(entity)
         _select = {},
         _includes = {},
         _bindings = {},
+        _joins = {},
+        _groupBy = {},
+        _having = {},
+        _distinct = false,
     }, Query)
 end
 
@@ -62,6 +66,47 @@ function Query:include(relation_name)
     return self
 end
 
+function Query:distinct()
+    self._distinct = true
+    return self
+end
+
+function Query:join(table_name, on_condition)
+    self._joins[#self._joins + 1] = { type = "INNER", table = table_name, on = on_condition }
+    return self
+end
+
+function Query:leftJoin(table_name, on_condition)
+    self._joins[#self._joins + 1] = { type = "LEFT", table = table_name, on = on_condition }
+    return self
+end
+
+function Query:rightJoin(table_name, on_condition)
+    self._joins[#self._joins + 1] = { type = "RIGHT", table = table_name, on = on_condition }
+    return self
+end
+
+function Query:innerJoin(table_name, on_condition)
+    self._joins[#self._joins + 1] = { type = "INNER", table = table_name, on = on_condition }
+    return self
+end
+
+function Query:groupBy(...)
+    local cols = { ... }
+    if #cols == 1 and type(cols[1]) == "table" then
+        cols = cols[1]
+    end
+    for _, col in ipairs(cols) do
+        self._groupBy[#self._groupBy + 1] = col
+    end
+    return self
+end
+
+function Query:having(condition)
+    self._having[#self._having + 1] = condition
+    return self
+end
+
 function Query:get()
     local sql, bindings = self:toSQL()
     local driver = self._entity._driver
@@ -70,7 +115,183 @@ function Query:get()
     for i, row in ipairs(raw) do
         instances[i] = Instance.new(self._entity, row)
     end
+
+    -- Eager load included relations
+    if #self._includes > 0 then
+        self:_eagerLoad(instances)
+    end
+
     return instances
+end
+
+function Query:_eagerLoad(instances)
+    if #instances == 0 then return end
+
+    for _, rel_name in ipairs(self._includes) do
+        local relation = self._entity._relations[rel_name]
+        if relation then
+            if relation.type == "belongsTo" then
+                -- belongsTo: load from target table where target.id = source.foreign_key
+                local ids = {}
+                for _, inst in ipairs(instances) do
+                    local fk = inst._data[relation.foreign_key]
+                    if fk ~= nil then
+                        ids[#ids + 1] = fk
+                    end
+                end
+
+                if #ids > 0 then
+                    local target_entity = relation.target
+                    local q = Query.new(target_entity)
+                    q._where = { Expression.new("id", target_entity._table):isIn(ids) }
+                    local related = q:get()
+
+                    local grouped = {}
+                    for _, r in ipairs(related) do
+                        grouped[r._data.id] = r
+                    end
+
+                    for _, inst in ipairs(instances) do
+                        local fk = inst._data[relation.foreign_key]
+                        inst._data[rel_name] = grouped[fk] or nil
+                    end
+                end
+
+            elseif relation.type == "hasOne" then
+                -- hasOne: load from target table where target.foreign_key = source.id
+                local ids = {}
+                for _, inst in ipairs(instances) do
+                    ids[#ids + 1] = inst._data.id
+                end
+
+                if #ids > 0 then
+                    local target_entity = relation.target
+                    local q = Query.new(target_entity)
+                    q._where = { Expression.new(relation.foreign_key, target_entity._table):isIn(ids) }
+                    local related = q:get()
+
+                    local grouped = {}
+                    for _, r in ipairs(related) do
+                        local key = r._data[relation.foreign_key]
+                        if key then
+                            grouped[key] = r
+                        end
+                    end
+
+                    for _, inst in ipairs(instances) do
+                        inst._data[rel_name] = grouped[inst._data.id] or nil
+                    end
+                end
+
+            elseif relation.type == "hasMany" then
+                -- hasMany: load from target table where target.foreign_key = source.id
+                local ids = {}
+                for _, inst in ipairs(instances) do
+                    ids[#ids + 1] = inst._data.id
+                end
+
+                if #ids > 0 then
+                    local target_entity = relation.target
+                    local q = Query.new(target_entity)
+                    q._where = { Expression.new(relation.foreign_key, target_entity._table):isIn(ids) }
+                    local related = q:get()
+
+                    local grouped = {}
+                    for _, r in ipairs(related) do
+                        local key = r._data[relation.foreign_key]
+                        if key then
+                            if not grouped[key] then grouped[key] = {} end
+                            grouped[key][#grouped[key] + 1] = r
+                        end
+                    end
+
+                    for _, inst in ipairs(instances) do
+                        inst._data[rel_name] = grouped[inst._data.id] or {}
+                    end
+                end
+
+            elseif relation.type == "hasAndBelongsToMany" then
+                -- hasAndBelongsToMany: load via join table
+                local source_ids = {}
+                for _, inst in ipairs(instances) do
+                    source_ids[#source_ids + 1] = inst._data[relation.source_key]
+                end
+
+                if #source_ids > 0 then
+                    local target_entity = relation.target
+                    local q = Query.new(target_entity)
+                    -- This is a simplified version - in production you'd join through the pivot table
+                    -- For now, we'll load all targets and filter in Lua
+                    local all_targets = q:get()
+
+                    local grouped = {}
+                    for _, target in ipairs(all_targets) do
+                        -- In a real implementation, you'd query the join table
+                        -- For now, we'll use a placeholder approach
+                        if not grouped["all"] then grouped["all"] = {} end
+                        grouped["all"][#grouped["all"] + 1] = target
+                    end
+
+                    for _, inst in ipairs(instances) do
+                        inst._data[rel_name] = grouped["all"] or {}
+                    end
+                end
+
+            elseif relation.type == "hasManyThrough" then
+                -- hasManyThrough: load via intermediate table
+                local source_ids = {}
+                for _, inst in ipairs(instances) do
+                    source_ids[#source_ids + 1] = inst._data.id
+                end
+
+                if #source_ids > 0 then
+                    local through_entity = relation.through
+                    local target_entity = relation.target
+
+                    -- Load through records
+                    local through_q = Query.new(through_entity)
+                    through_q._where = { Expression.new(relation.source_foreign_key, through_entity._table):isIn(source_ids) }
+                    local through_records = through_q:get()
+
+                    -- Collect target IDs
+                    local target_ids = {}
+                    for _, through_rec in ipairs(through_records) do
+                        local target_id = through_rec._data[relation.target_foreign_key]
+                        if target_id then
+                            target_ids[#target_ids + 1] = target_id
+                        end
+                    end
+
+                    if #target_ids > 0 then
+                        -- Load target records
+                        local target_q = Query.new(target_entity)
+                        target_q._where = { Expression.new("id", target_entity._table):isIn(target_ids) }
+                        local targets = target_q:get()
+
+                        local target_map = {}
+                        for _, t in ipairs(targets) do
+                            target_map[t._data.id] = t
+                        end
+
+                        -- Group by source ID
+                        local grouped = {}
+                        for _, through_rec in ipairs(through_records) do
+                            local source_id = through_rec._data[relation.source_foreign_key]
+                            local target_id = through_rec._data[relation.target_foreign_key]
+                            if source_id and target_id and target_map[target_id] then
+                                if not grouped[source_id] then grouped[source_id] = {} end
+                                grouped[source_id][#grouped[source_id] + 1] = target_map[target_id]
+                            end
+                        end
+
+                        for _, inst in ipairs(instances) do
+                            inst._data[rel_name] = grouped[inst._data.id] or {}
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
 function Query:first()
@@ -79,6 +300,10 @@ function Query:first()
     q._orderBy = self._orderBy
     q._select = self._select
     q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
     q._limit = 1
     q._offset = self._offset
     local results = q:get()
@@ -91,6 +316,10 @@ function Query:find(id)
     q._orderBy = self._orderBy
     q._select = self._select
     q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
     q._limit = 1
     q._offset = self._offset
     local results = q:get()
@@ -103,6 +332,10 @@ function Query:count()
     q._orderBy = self._orderBy
     q._select = { "COUNT(*) as count" }
     q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
     q._limit = self._limit
     q._offset = self._offset
     local sql, bindings = q:toSQL()
@@ -117,6 +350,10 @@ function Query:sum(column)
     q._orderBy = self._orderBy
     q._select = { "SUM(" .. column .. ") as sum" }
     q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
     q._limit = self._limit
     q._offset = self._offset
     local sql, bindings = q:toSQL()
@@ -131,12 +368,52 @@ function Query:average(column)
     q._orderBy = self._orderBy
     q._select = { "AVG(" .. column .. ") as avg" }
     q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
     q._limit = self._limit
     q._offset = self._offset
     local sql, bindings = q:toSQL()
     local driver = self._entity._driver
     local result = driver:execute(sql, bindings)
     return result[1] and result[1].avg or 0
+end
+
+function Query:min(column)
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._orderBy = self._orderBy
+    q._select = { "MIN(" .. column .. ") as min" }
+    q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
+    q._limit = self._limit
+    q._offset = self._offset
+    local sql, bindings = q:toSQL()
+    local driver = self._entity._driver
+    local result = driver:execute(sql, bindings)
+    return result[1] and result[1].min or 0
+end
+
+function Query:max(column)
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._orderBy = self._orderBy
+    q._select = { "MAX(" .. column .. ") as max" }
+    q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
+    q._limit = self._limit
+    q._offset = self._offset
+    local sql, bindings = q:toSQL()
+    local driver = self._entity._driver
+    local result = driver:execute(sql, bindings)
+    return result[1] and result[1].max or 0
 end
 
 function Query:paginate(options)

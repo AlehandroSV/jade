@@ -1,5 +1,6 @@
 local Driver = require("jade.driver.base")
 local pgmoon = require("pgmoon")
+local Pool = require("jade.driver.pool")
 
 local PostgreSQL = {}
 PostgreSQL.__index = PostgreSQL
@@ -13,6 +14,7 @@ function PostgreSQL.new()
     setmetatable(self, PostgreSQL)
     self._conn = nil
     self._config = nil
+    self._pool = nil
     return self
 end
 
@@ -24,6 +26,16 @@ function PostgreSQL:connect(config)
         user = config.user or "postgres",
         password = config.password or ""
     }
+
+    -- Initialize connection pool if pool_size is specified
+    if config.pool_size then
+        self._pool = Pool.new(self, {
+            max_size = config.pool_size or 10,
+            min_size = config.pool_min or 2,
+            idle_timeout = config.pool_timeout or 300,
+        })
+    end
+
     return self
 end
 
@@ -38,6 +50,10 @@ function PostgreSQL:_ensureConnected()
 end
 
 function PostgreSQL:disconnect()
+    if self._pool then
+        self._pool:close()
+        self._pool = nil
+    end
     if self._conn then
         self._conn:disconnect()
         self._conn = nil
@@ -92,6 +108,12 @@ function PostgreSQL:executeWithConnection(conn, sql, bindings)
 end
 
 function PostgreSQL:execute(sql, bindings)
+    -- Use pool if available
+    if self._pool then
+        return self._pool:execute(sql, bindings)
+    end
+
+    -- Otherwise use shared connection
     self:_ensureConnected()
     if bindings and #bindings > 0 then
         local res, err = self._conn:query(sql, table.unpack(bindings))
@@ -125,18 +147,56 @@ function PostgreSQL:mapType(column_type)
     return map[column_type.type] or "TEXT"
 end
 
+-- Helper to convert ? placeholders to $N for pgmoon
+local function convertPlaceholders(sql, bindings, start_idx)
+    local idx = start_idx or 1
+    sql = sql:gsub("%?", function()
+        local s = "$" .. idx
+        idx = idx + 1
+        return s
+    end)
+    return sql, idx
+end
+
 function PostgreSQL:generateSelect(query)
     local sql = {}
     local bindings = {}
 
-    if #query._select > 0 then
-        sql[#sql + 1] = "SELECT " .. table.concat(query._select, ", ")
-    else
-        sql[#sql + 1] = "SELECT *"
+    -- SELECT clause with DISTINCT
+    local select_prefix = "SELECT"
+    if query._distinct then
+        select_prefix = "SELECT DISTINCT"
     end
 
+    if #query._select > 0 then
+        sql[#sql + 1] = select_prefix .. " " .. table.concat(query._select, ", ")
+    else
+        sql[#sql + 1] = select_prefix .. " *"
+    end
+
+    -- FROM clause
     sql[#sql + 1] = "FROM " .. query._table
 
+    -- JOIN clauses
+    if #query._joins > 0 then
+        for _, join in ipairs(query._joins) do
+            local join_sql = join.type .. " JOIN " .. join.table .. " ON "
+            local on_sql, on_bindings = join.on:compile()
+            for _, b in ipairs(on_bindings) do
+                bindings[#bindings + 1] = b
+            end
+            -- Convert placeholders in ON clause
+            local idx = #bindings - #on_bindings + 1
+            on_sql = on_sql:gsub("%?", function()
+                local s = "$" .. idx
+                idx = idx + 1
+                return s
+            end)
+            sql[#sql + 1] = join_sql .. on_sql
+        end
+    end
+
+    -- WHERE clause
     if #query._where > 0 then
         local where_parts = {}
         for _, cond in ipairs(query._where) do
@@ -148,15 +208,40 @@ function PostgreSQL:generateSelect(query)
         end
         local where_sql = table.concat(where_parts, " AND ")
         -- Convert ? placeholders to $N for pgmoon
-        local idx = 1
-        where_sql = where_sql:gsub("%?", function()
-            local s = "$" .. idx
-            idx = idx + 1
-            return s
-        end)
+        where_sql = convertPlaceholders(where_sql, bindings, 1)
         sql[#sql + 1] = "WHERE " .. where_sql
     end
 
+    -- GROUP BY clause
+    if #query._groupBy > 0 then
+        local group_parts = {}
+        for _, col in ipairs(query._groupBy) do
+            local col_name = col
+            if type(col) == "table" and col._column then
+                col_name = col._column
+            end
+            group_parts[#group_parts + 1] = col_name
+        end
+        sql[#sql + 1] = "GROUP BY " .. table.concat(group_parts, ", ")
+    end
+
+    -- HAVING clause
+    if #query._having > 0 then
+        local having_parts = {}
+        for _, cond in ipairs(query._having) do
+            local sql_part, bind = cond:compile()
+            having_parts[#having_parts + 1] = sql_part
+            for _, b in ipairs(bind) do
+                bindings[#bindings + 1] = b
+            end
+        end
+        local having_sql = table.concat(having_parts, " AND ")
+        -- Convert ? placeholders to $N for pgmoon
+        having_sql = convertPlaceholders(having_sql, bindings, 1)
+        sql[#sql + 1] = "HAVING " .. having_sql
+    end
+
+    -- ORDER BY clause
     if #query._orderBy > 0 then
         local order_parts = {}
         for _, o in ipairs(query._orderBy) do
@@ -165,9 +250,12 @@ function PostgreSQL:generateSelect(query)
         sql[#sql + 1] = "ORDER BY " .. table.concat(order_parts, ", ")
     end
 
+    -- LIMIT clause
     if query._limit then
         sql[#sql + 1] = "LIMIT " .. tostring(query._limit)
     end
+
+    -- OFFSET clause
     if query._offset then
         sql[#sql + 1] = "OFFSET " .. tostring(query._offset)
     end
