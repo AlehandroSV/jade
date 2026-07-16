@@ -43,7 +43,7 @@ end
 
 function Table:softDeletes(column)
     column = column or "deleted_at"
-    self:column(column, "timestamp", { nullable = true })
+    self:column(column, "timestamp")
     return self
 end
 
@@ -73,7 +73,6 @@ end
 
 function Table:toSQL(driver)
     local parts = {}
-    local Column = require("jade.schema.column")
 
     for _, col in ipairs(self.columns) do
         local col_sql = "    " .. col._name .. " " .. driver:mapType(col)
@@ -89,6 +88,9 @@ function Table:toSQL(driver)
         if col._default then
             if col._default == "CURRENT_TIMESTAMP" then
                 col_sql = col_sql .. " DEFAULT CURRENT_TIMESTAMP"
+            elseif type(col._default) == "string" then
+                -- Quote string defaults
+                col_sql = col_sql .. " DEFAULT '" .. col._default:gsub("'", "''") .. "'"
             else
                 col_sql = col_sql .. " DEFAULT " .. tostring(col._default)
             end
@@ -119,20 +121,24 @@ function Table:toSQL(driver)
         table.concat(parts, ",\n")
     )
 
-    -- Add indexes
+    return sql
+end
+
+-- Generate index statements separately (not concatenated with CREATE TABLE)
+function Table:indexSQL()
+    local statements = {}
     for _, idx in ipairs(self.indexes) do
         local idx_name = idx.name or (self.name .. "_idx_" .. table.concat(idx.columns, "_"))
         local unique = idx.unique and "UNIQUE " or ""
-        sql = sql .. string.format(
-            "\nCREATE %sINDEX %s ON %s (%s)",
+        statements[#statements + 1] = string.format(
+            "CREATE %sINDEX %s ON %s (%s)",
             unique,
             idx_name,
             self.name,
             table.concat(idx.columns, ", ")
         )
     end
-
-    return sql
+    return statements
 end
 
 return Table

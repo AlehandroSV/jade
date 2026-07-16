@@ -5,8 +5,17 @@ function Schema.createTable(driver, name, fn)
     local Table = require("jade.schema.table")
     local tbl = Table.new(name)
     fn(tbl)
+
+    -- Execute CREATE TABLE
     local sql = tbl:toSQL(driver)
     driver:execute(sql)
+
+    -- Execute CREATE INDEX statements separately
+    local index_statements = tbl:indexSQL()
+    for _, idx_sql in ipairs(index_statements) do
+        driver:execute(idx_sql)
+    end
+
     return true
 end
 
@@ -33,7 +42,11 @@ function Schema.addColumn(driver, table_name, column_name, type_name, options)
         sql = sql .. " NOT NULL"
     end
     if options.default ~= nil then
-        sql = sql .. " DEFAULT " .. tostring(options.default)
+        if type(options.default) == "string" then
+            sql = sql .. " DEFAULT '" .. options.default:gsub("'", "''") .. "'"
+        else
+            sql = sql .. " DEFAULT " .. tostring(options.default)
+        end
     end
 
     driver:execute(sql)

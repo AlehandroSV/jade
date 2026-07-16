@@ -211,29 +211,69 @@ function Query:_eagerLoad(instances)
                 end
 
             elseif relation.type == "hasAndBelongsToMany" then
-                -- hasAndBelongsToMany: load via join table
+                -- hasAndBelongsToMany: query pivot table first, then load targets
                 local source_ids = {}
                 for _, inst in ipairs(instances) do
                     source_ids[#source_ids + 1] = inst._data[relation.source_key]
                 end
 
                 if #source_ids > 0 then
-                    local target_entity = relation.target
-                    local q = Query.new(target_entity)
-                    -- This is a simplified version - in production you'd join through the pivot table
-                    -- For now, we'll load all targets and filter in Lua
-                    local all_targets = q:get()
+                    local driver = self._entity._driver
 
-                    local grouped = {}
-                    for _, target in ipairs(all_targets) do
-                        -- In a real implementation, you'd query the join table
-                        -- For now, we'll use a placeholder approach
-                        if not grouped["all"] then grouped["all"] = {} end
-                        grouped["all"][#grouped["all"] + 1] = target
+                    -- Query pivot table to get mappings
+                    local pivot_sql = string.format(
+                        "SELECT %s, %s FROM %s WHERE %s IN (%s)",
+                        relation.source_foreign_key,
+                        relation.target_foreign_key,
+                        relation.join_table,
+                        relation.source_foreign_key,
+                        string.rep("?", #source_ids)
+                    )
+                    local pivot_result = driver:execute(pivot_sql, source_ids)
+
+                    -- Collect target IDs grouped by source ID
+                    local source_to_targets = {}
+                    local all_target_ids = {}
+                    for _, row in ipairs(pivot_result) do
+                        local source_id = row[relation.source_foreign_key]
+                        local target_id = row[relation.target_foreign_key]
+                        if source_id and target_id then
+                            if not source_to_targets[source_id] then
+                                source_to_targets[source_id] = {}
+                            end
+                            source_to_targets[source_id][#source_to_targets[source_id] + 1] = target_id
+                            all_target_ids[#all_target_ids + 1] = target_id
+                        end
                     end
 
+                    -- Load target records
+                    if #all_target_ids > 0 then
+                        local target_entity = relation.target
+                        local q = Query.new(target_entity)
+                        q._where = { Expression.new(relation.target_key, target_entity._table):isIn(all_target_ids) }
+                        local targets = q:get()
+
+                        local target_map = {}
+                        for _, t in ipairs(targets) do
+                            target_map[t._data[relation.target_key]] = t
+                        end
+
+                        -- Group targets by source ID
+                        for source_id, target_ids in pairs(source_to_targets) do
+                            local grouped = {}
+                            for _, target_id in ipairs(target_ids) do
+                                if target_map[target_id] then
+                                    grouped[#grouped + 1] = target_map[target_id]
+                                end
+                            end
+                            source_to_targets[source_id] = grouped
+                        end
+                    end
+
+                    -- Attach to instances
                     for _, inst in ipairs(instances) do
-                        inst._data[rel_name] = grouped["all"] or {}
+                        local source_id = inst._data[relation.source_key]
+                        inst._data[rel_name] = source_to_targets[source_id] or {}
                     end
                 end
 
