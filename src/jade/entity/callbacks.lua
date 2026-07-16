@@ -86,14 +86,18 @@ function Callbacks.runAround(entity, event, instance, data, fn)
         return fn()
     end
 
-    -- Chain around callbacks
+    -- Chain around callbacks with error handling
     local function execute_chain(idx)
         if idx > #hooks then
             return fn()
         end
-        return hooks[idx](instance, data, function()
+        local ok, result = pcall(hooks[idx], instance, data, function()
             return execute_chain(idx + 1)
         end)
+        if not ok then
+            error("Around callback error (" .. event .. "): " .. tostring(result))
+        end
+        return result
     end
 
     return execute_chain(1)

@@ -109,6 +109,9 @@ end
 
 function Validations.validate(entity, data)
     local errors = {}
+    local Expression = require("jade.query.expression")
+    local Condition = require("jade.query.condition")
+    local Query = require("jade.query")
 
     for _, validation in ipairs(entity._validations) do
         local value = data[validation.column]
@@ -123,10 +126,30 @@ function Validations.validate(entity, data)
 
         elseif validation.type == "uniqueness" then
             if value ~= nil and entity._driver then
-                local Condition = require("jade.query.condition")
-                local Query = require("jade.query")
                 local q = Query.new(entity)
-                q._where = { Condition.new(validation.column, "=", value, entity._table) }
+                local conditions = { Condition.new(validation.column, "=", value, entity._table) }
+
+                -- Add scope conditions if provided
+                if validation.scope then
+                    local scope_columns = validation.scope
+                    if type(scope_columns) == "string" then
+                        scope_columns = { scope_columns }
+                    end
+                    for _, scope_col in ipairs(scope_columns) do
+                        local scope_value = data[scope_col]
+                        if scope_value ~= nil then
+                            conditions[#conditions + 1] = Condition.new(scope_col, "=", scope_value, entity._table)
+                        end
+                    end
+                end
+
+                -- Build WHERE clause with AND
+                local where = conditions[1]
+                for i = 2, #conditions do
+                    where = where:band(conditions[i])
+                end
+
+                q._where = { where }
                 q._limit = 1
                 local sql, bindings = q:toSQL()
                 local result = entity._driver:execute(sql, bindings)
@@ -134,7 +157,8 @@ function Validations.validate(entity, data)
                     -- Check if it's the same record (for updates)
                     local existing_id = result[1].id
                     local current_id = data.id
-                    if not current_id or existing_id ~= current_id then
+                    -- Use tostring for safe comparison (handles number/string mismatch)
+                    if not current_id or tostring(existing_id) ~= tostring(current_id) then
                         valid = false
                         message = validation.message or (validation.column .. " already exists")
                     end
