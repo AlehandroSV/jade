@@ -1,5 +1,6 @@
 local Expression = require("jade.query.expression")
 local Condition = require("jade.query.condition")
+local Instance = require("jade.entity.instance")
 
 local Query = {}
 Query.__index = Query
@@ -64,7 +65,12 @@ end
 function Query:get()
     local sql, bindings = self:toSQL()
     local driver = self._entity._driver
-    return driver:execute(sql, bindings)
+    local raw = driver:execute(sql, bindings)
+    local instances = {}
+    for i, row in ipairs(raw) do
+        instances[i] = Instance.new(self._entity, row)
+    end
+    return instances
 end
 
 function Query:first()

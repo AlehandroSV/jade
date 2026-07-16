@@ -133,7 +133,8 @@ end
 function Entity:create(data)
     local sql, bindings = self._driver:generateInsert(self._table, data, self)
     local result = self._driver:execute(sql, bindings)
-    return Instance.new(self, result)
+    local row = result[1] or result
+    return Instance.new(self, row)
 end
 
 function Entity:update(id, data)
