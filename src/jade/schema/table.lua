@@ -9,6 +9,7 @@ function Table.new(name)
         columns = {},
         indexes = {},
         foreign_keys = {},
+        options = {},
     }, Table)
 end
 
@@ -20,6 +21,7 @@ function Table:column(name, type_name, options)
     col._table = self.name
 
     if options.primary_key then col:primaryKey() end
+    if options.auto_increment then col:autoIncrement() end
     if options.unique then col:unique() end
     if options.null == false then col:notNull() end
     if options.default ~= nil then col:default(options.default) end
@@ -34,7 +36,7 @@ end
 
 function Table:primaryKey(name)
     name = name or "id"
-    return self:column(name, "integer", { primary_key = true })
+    return self:column(name, "integer", { primary_key = true, auto_increment = true })
 end
 
 function Table:timestamps()
@@ -73,6 +75,21 @@ function Table:foreignKey(options)
     return self
 end
 
+function Table:setEngine(engine)
+    self.options.engine = engine
+    return self
+end
+
+function Table:setCharset(charset)
+    self.options.charset = charset
+    return self
+end
+
+function Table:setCollation(collation)
+    self.options.collation = collation
+    return self
+end
+
 function Table:toSQL(driver)
     local parts = {}
 
@@ -80,6 +97,10 @@ function Table:toSQL(driver)
         local col_sql = "    " .. Quoting.quoteIdentifier(col._name) .. " " .. driver:mapType(col)
         if col._primary_key then
             col_sql = col_sql .. " PRIMARY KEY"
+            -- Add AUTO_INCREMENT for MySQL if auto_increment is set
+            if col._auto_increment and driver:dropTableCascade() == false then
+                col_sql = col_sql .. " AUTO_INCREMENT"
+            end
         end
         if not col._nullable and not col._primary_key then
             col_sql = col_sql .. " NOT NULL"
@@ -121,6 +142,22 @@ function Table:toSQL(driver)
         Quoting.quoteIdentifier(self.name),
         table.concat(parts, ",\n")
     )
+
+    -- Add table options (ENGINE, CHARSET, COLLATION)
+    local options = {}
+    if self.options.engine then
+        options[#options + 1] = "ENGINE=" .. self.options.engine
+    end
+    if self.options.charset then
+        options[#options + 1] = "CHARSET=" .. self.options.charset
+    end
+    if self.options.collation then
+        options[#options + 1] = "COLLATE=" .. self.options.collation
+    end
+
+    if #options > 0 then
+        sql = sql .. " " .. table.concat(options, " ")
+    end
 
     return sql
 end

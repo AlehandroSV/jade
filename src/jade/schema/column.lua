@@ -8,6 +8,7 @@ function Column.new(_, type_name, length)
         _nullable = true,
         _unique = false,
         _primary_key = false,
+        _auto_increment = false,
         _default = nil,
         _references = nil,
         _name = nil,
@@ -19,6 +20,11 @@ end
 function Column:primaryKey()
     self._primary_key = true
     self._nullable = false
+    return self
+end
+
+function Column:autoIncrement()
+    self._auto_increment = true
     return self
 end
 
