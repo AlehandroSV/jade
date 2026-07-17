@@ -6,12 +6,19 @@ describe("Soft Delete", function()
     local Boolean = require("jade.types.boolean")
 
     local User
+    local Post
 
     before_each(function()
         User = Entity.new("users", {
             id = Integer():primaryKey(),
             name = String(120),
             active = Boolean():default(true),
+        })
+
+        Post = Entity.new("posts", {
+            id = Integer():primaryKey(),
+            title = String(200),
+            user_id = Integer(),
         })
     end)
 
@@ -54,5 +61,31 @@ describe("Soft Delete", function()
     it("adds restore method", function()
         SoftDelete.setup(User)
         assert.is_function(User.restore)
+    end)
+
+    it("adds withoutTrashed method", function()
+        SoftDelete.setup(User)
+        assert.is_function(User.withoutTrashed)
+    end)
+
+    describe("cascade", function()
+        it("enables cascade by default", function()
+            SoftDelete.setup(User)
+            assert.is_true(SoftDelete.hasCascade(User))
+        end)
+
+        it("can disable cascade", function()
+            SoftDelete.setup(User, { cascade = false })
+            assert.is_false(SoftDelete.hasCascade(User))
+        end)
+
+        it("sets up cascade for related entities", function()
+            SoftDelete.setup(User)
+            SoftDelete.setup(Post)
+            User:hasMany(Post)
+
+            assert.is_true(SoftDelete.hasCascade(User))
+            assert.is_true(SoftDelete.hasCascade(Post))
+        end)
     end)
 end)
