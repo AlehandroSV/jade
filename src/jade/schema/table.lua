@@ -94,7 +94,7 @@ function Table:toSQL(driver)
     local parts = {}
 
     for _, col in ipairs(self.columns) do
-        local col_sql = "    " .. Quoting.quoteIdentifier(col._name) .. " " .. driver:mapType(col)
+        local col_sql = "    " .. driver:quoteIdentifier(col._name) .. " " .. driver:mapType(col)
         if col._primary_key then
             col_sql = col_sql .. " PRIMARY KEY"
             -- Add AUTO_INCREMENT for databases that support it
@@ -124,9 +124,9 @@ function Table:toSQL(driver)
     for _, fk in ipairs(self.foreign_keys) do
         local fk_sql = string.format(
             "    FOREIGN KEY (%s) REFERENCES %s(%s)",
-            Quoting.quoteIdentifier(fk.column),
-            Quoting.quoteIdentifier(fk.references_table),
-            Quoting.quoteIdentifier(fk.references_column)
+            driver:quoteIdentifier(fk.column),
+            driver:quoteIdentifier(fk.references_table),
+            driver:quoteIdentifier(fk.references_column)
         )
         if fk.on_delete then
             fk_sql = fk_sql .. " ON DELETE " .. fk.on_delete:upper()
@@ -139,7 +139,7 @@ function Table:toSQL(driver)
 
     local sql = string.format(
         "CREATE TABLE %s (\n%s\n)",
-        Quoting.quoteIdentifier(self.name),
+        driver:quoteIdentifier(self.name),
         table.concat(parts, ",\n")
     )
 
@@ -163,20 +163,20 @@ function Table:toSQL(driver)
 end
 
 -- Generate index statements separately (not concatenated with CREATE TABLE)
-function Table:indexSQL()
+function Table:indexSQL(driver)
     local statements = {}
     for _, idx in ipairs(self.indexes) do
         local idx_name = idx.name or (self.name .. "_idx_" .. table.concat(idx.columns, "_"))
         local unique = idx.unique and "UNIQUE " or ""
         local quoted_columns = {}
         for _, col in ipairs(idx.columns) do
-            quoted_columns[#quoted_columns + 1] = Quoting.quoteIdentifier(col)
+            quoted_columns[#quoted_columns + 1] = driver:quoteIdentifier(col)
         end
         statements[#statements + 1] = string.format(
             "CREATE %sINDEX %s ON %s (%s)",
             unique,
-            Quoting.quoteIdentifier(idx_name),
-            Quoting.quoteIdentifier(self.name),
+            driver:quoteIdentifier(idx_name),
+            driver:quoteIdentifier(self.name),
             table.concat(quoted_columns, ", ")
         )
     end

@@ -82,6 +82,13 @@ function MySQL:disconnect()
     end
 end
 
+-- Close a single connection (used by pool)
+function MySQL:closeConnection(conn)
+    if conn then
+        conn:close()
+    end
+end
+
 -- Quote identifier with backticks for MySQL
 function MySQL:quoteIdentifier(name)
     return "`" .. name:gsub("`", "``") .. "`"
@@ -172,7 +179,6 @@ function MySQL:execute(sql, bindings)
         error("Query failed: " .. tostring(err))
     end
     return res
-    end
 end
 
 function MySQL:mapType(column_type)
@@ -221,12 +227,12 @@ function MySQL:generateSelect(query)
     end
 
     -- FROM clause
-    sql[#sql + 1] = "FROM `" .. query._table .. "`"
+    sql[#sql + 1] = "FROM " .. self:quoteIdentifier(query._table)
 
     -- JOIN clauses
     if #query._joins > 0 then
         for _, join in ipairs(query._joins) do
-            local join_sql = join.type .. " JOIN `" .. join.table .. "` ON "
+            local join_sql = join.type .. " JOIN " .. self:quoteIdentifier(join.table) .. " ON "
             local on_sql, on_bindings = join.on:compile()
             for _, b in ipairs(on_bindings) do
                 bindings[#bindings + 1] = b
@@ -256,7 +262,7 @@ function MySQL:generateSelect(query)
             if type(col) == "table" and col._column then
                 col_name = col._column
             end
-            group_parts[#group_parts + 1] = "`" .. col_name .. "`"
+            group_parts[#group_parts + 1] = self:quoteIdentifier(col_name)
         end
         sql[#sql + 1] = "GROUP BY " .. table.concat(group_parts, ", ")
     end
@@ -278,7 +284,7 @@ function MySQL:generateSelect(query)
     if #query._orderBy > 0 then
         local order_parts = {}
         for _, o in ipairs(query._orderBy) do
-            order_parts[#order_parts + 1] = "`" .. o.column .. "` " .. o.dir
+            order_parts[#order_parts + 1] = self:quoteIdentifier(o.column) .. " " .. o.dir
         end
         sql[#sql + 1] = "ORDER BY " .. table.concat(order_parts, ", ")
     end
@@ -302,14 +308,14 @@ function MySQL:generateInsert(table_name, data, entity)
     local bindings = {}
 
     for key, value in pairs(data) do
-        columns[#columns + 1] = "`" .. key .. "`"
+        columns[#columns + 1] = self:quoteIdentifier(key)
         placeholders[#placeholders + 1] = "?"
         bindings[#bindings + 1] = value
     end
 
     local sql = string.format(
-        "INSERT INTO `%s` (%s) VALUES (%s)",
-        table_name,
+        "INSERT INTO %s (%s) VALUES (%s)",
+        self:quoteIdentifier(table_name),
         table.concat(columns, ", "),
         table.concat(placeholders, ", ")
     )
@@ -322,7 +328,7 @@ function MySQL:generateUpdate(table_name, data, where)
     local bindings = {}
 
     for key, value in pairs(data) do
-        set_parts[#set_parts + 1] = "`" .. key .. "` = ?"
+        set_parts[#set_parts + 1] = self:quoteIdentifier(key) .. " = ?"
         bindings[#bindings + 1] = value
     end
 
@@ -332,8 +338,8 @@ function MySQL:generateUpdate(table_name, data, where)
     end
 
     local sql = string.format(
-        "UPDATE `%s` SET %s WHERE %s",
-        table_name,
+        "UPDATE %s SET %s WHERE %s",
+        self:quoteIdentifier(table_name),
         table.concat(set_parts, ", "),
         where_sql
     )
@@ -345,8 +351,8 @@ function MySQL:generateDelete(table_name, where)
     local where_sql, bindings = where:compile()
 
     local sql = string.format(
-        "DELETE FROM `%s` WHERE %s",
-        table_name,
+        "DELETE FROM %s WHERE %s",
+        self:quoteIdentifier(table_name),
         where_sql
     )
 

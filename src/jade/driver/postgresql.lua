@@ -61,6 +61,13 @@ function PostgreSQL:disconnect()
     end
 end
 
+-- Close a single connection (used by pool)
+function PostgreSQL:closeConnection(conn)
+    if conn then
+        conn:disconnect()
+    end
+end
+
 -- Transaction methods
 function PostgreSQL:getConnection()
     local pg = pgmoon.new(self._config)
