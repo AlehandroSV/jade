@@ -85,6 +85,12 @@ function Driver:supportsAutoIncrement()
     return false
 end
 
+-- Returns the AUTO_INCREMENT keyword for the specific database.
+-- Override in drivers that use different syntax (e.g., SQLite uses AUTOINCREMENT).
+function Driver:autoIncrementKeyword()
+    return "AUTO_INCREMENT"
+end
+
 -- Quote an identifier for the specific database.
 -- Override in drivers that use different quoting (e.g., MySQL uses backticks).
 function Driver:quoteIdentifier(name)

@@ -99,7 +99,7 @@ function Table:toSQL(driver)
             col_sql = col_sql .. " PRIMARY KEY"
             -- Add AUTO_INCREMENT for databases that support it
             if col._auto_increment and driver:supportsAutoIncrement() then
-                col_sql = col_sql .. " AUTO_INCREMENT"
+                col_sql = col_sql .. " " .. driver:autoIncrementKeyword()
             end
         end
         if not col._nullable and not col._primary_key then

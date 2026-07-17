@@ -56,6 +56,7 @@ build = {
         ["jade.driver.base"] = "src/jade/driver/base.lua",
         ["jade.driver.postgresql"] = "src/jade/driver/postgresql.lua",
         ["jade.driver.mysql"] = "src/jade/driver/mysql.lua",
+        ["jade.driver.sqlite"] = "src/jade/driver/sqlite.lua",
         ["jade.driver.pool"] = "src/jade/driver/pool.lua",
         ["jade.migration"] = "src/jade/migration/init.lua",
         ["jade.migration.tracker"] = "src/jade/migration/tracker.lua",

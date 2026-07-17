@@ -30,6 +30,7 @@ end
 -- Register drivers lazily to avoid loading errors
 registerLazy("postgresql", "jade.driver.postgresql")
 registerLazy("mysql", "jade.driver.mysql")
+registerLazy("sqlite", "jade.driver.sqlite")
 
 return {
     register = register,

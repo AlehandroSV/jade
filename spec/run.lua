@@ -153,6 +153,7 @@ local test_files = {
     "query/builder_spec.lua",
     "driver/postgresql_spec.lua",
     "driver/mysql_spec.lua",
+    "driver/sqlite_spec.lua",
     "migration/tracker_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
