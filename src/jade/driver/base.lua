@@ -15,6 +15,7 @@ Driver.__index = Driver
 -- commitTransaction(conn)
 -- rollbackTransaction(conn)
 -- executeWithConnection(conn, sql, bindings)
+-- dropTableCascade() -> boolean (whether DROP TABLE supports CASCADE)
 
 function Driver.new()
     return setmetatable({}, Driver)
@@ -70,6 +71,12 @@ end
 
 function Driver:executeWithConnection(conn, sql, bindings)
     error("Driver:executeWithConnection() not implemented")
+end
+
+-- Returns true if the database supports CASCADE in DROP TABLE statements.
+-- Override in drivers that do not support CASCADE (e.g., SQLite).
+function Driver:dropTableCascade()
+    return true
 end
 
 return Driver

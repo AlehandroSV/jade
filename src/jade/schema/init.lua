@@ -20,7 +20,10 @@ function Schema.createTable(driver, name, fn)
 end
 
 function Schema.dropTable(driver, name)
-    local sql = "DROP TABLE IF EXISTS " .. name .. " CASCADE"
+    local sql = "DROP TABLE IF EXISTS " .. name
+    if driver:dropTableCascade() then
+        sql = sql .. " CASCADE"
+    end
     driver:execute(sql)
     return true
 end
