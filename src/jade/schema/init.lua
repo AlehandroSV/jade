@@ -22,7 +22,10 @@ function Schema.createTable(driver, name, fn)
 end
 
 function Schema.dropTable(driver, name)
-    local sql = "DROP TABLE IF EXISTS " .. Quoting.quoteIdentifier(name) .. " CASCADE"
+    local sql = "DROP TABLE IF EXISTS " .. Quoting.quoteIdentifier(name)
+    if driver:dropTableCascade() then
+        sql = sql .. " CASCADE"
+    end
     driver:execute(sql)
     return true
 end

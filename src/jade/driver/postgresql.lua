@@ -148,6 +148,10 @@ function PostgreSQL:mapType(column_type)
     return map[column_type.type] or "TEXT"
 end
 
+function PostgreSQL:dropTableCascade()
+    return true
+end
+
 -- Helper to convert ? placeholders to $N for pgmoon
 local function convertPlaceholders(sql, bindings, start_idx)
     local idx = start_idx or 1
