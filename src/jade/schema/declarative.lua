@@ -260,7 +260,19 @@ function Declarative.generateEntity(model)
     for field_name, validations in pairs(model.validations) do
         if columns[field_name] then
             for validation_type, options in pairs(validations) do
-                entity:validates(field_name, validation_type, options)
+                if validation_type == "presence" and options == true then
+                    entity:validatePresenceOf(field_name)
+                elseif validation_type == "uniqueness" then
+                    entity:validateUniquenessOf(field_name, type(options) == "table" and options or {})
+                elseif validation_type == "length" then
+                    entity:validateLengthOf(field_name, type(options) == "table" and options or {})
+                elseif validation_type == "format" then
+                    entity:validateFormatOf(field_name, type(options) == "table" and options or {})
+                elseif validation_type == "inclusion" then
+                    entity:validateInclusionOf(field_name, type(options) == "table" and options or {})
+                elseif validation_type == "numericality" then
+                    entity:validateNumericalityOf(field_name, type(options) == "table" and options or {})
+                end
             end
         end
     end
@@ -452,33 +464,62 @@ end
 function Declarative.diffFields(old_field, new_field)
     return old_field.type ~= new_field.type or
            old_field.length ~= new_field.length or
+           old_field.precision ~= new_field.precision or
+           old_field.scale ~= new_field.scale or
            old_field.primary_key ~= new_field.primary_key or
            old_field.unique ~= new_field.unique or
            old_field.not_null ~= new_field.not_null or
            old_field.default ~= new_field.default or
-           old_field.default_now ~= new_field.default_now
+           old_field.default_now ~= new_field.default_now or
+           (old_field.references ~= new_field.references and
+            (not old_field.references or not new_field.references or
+             old_field.references.table ~= new_field.references.table or
+             old_field.references.column ~= new_field.references.column))
 end
 
 -- Export schema to Lua format compatible with Esmeralda CLI
+-- For single model: returns Jade.Entity(...)
+-- For multiple models: returns table of entities
 function Declarative.toLuaSchema(schema)
     local lines = {}
+    local model_count = 0
+    for _ in pairs(schema.models) do model_count = model_count + 1 end
 
     lines[#lines + 1] = 'local Jade = require("jade")'
     lines[#lines + 1] = ''
 
-    for model_name, model in pairs(schema.models) do
-        -- Generate entity definition
-        local entity_name = model.tableName
-        lines[#lines + 1] = string.format('return Jade.Entity("%s", {', entity_name)
+    if model_count == 1 then
+        -- Single model: return entity directly
+        for model_name, model in pairs(schema.models) do
+            local entity_name = model.tableName
+            lines[#lines + 1] = string.format('return Jade.Entity("%s", {', entity_name)
 
-        -- Add columns
-        for field_name, field in pairs(model.fields) do
-            local col_def = Declarative.fieldToLua(field_name, field)
-            lines[#lines + 1] = '    ' .. col_def .. ','
+            for field_name, field in pairs(model.fields) do
+                local col_def = Declarative.fieldToLua(field_name, field)
+                lines[#lines + 1] = '    ' .. col_def .. ','
+            end
+
+            lines[#lines + 1] = '})'
+        end
+    else
+        -- Multiple models: return table of entities
+        lines[#lines + 1] = 'local entities = {}'
+        lines[#lines + 1] = ''
+
+        for model_name, model in pairs(schema.models) do
+            local entity_name = model.tableName
+            lines[#lines + 1] = string.format('entities["%s"] = Jade.Entity("%s", {', entity_name, entity_name)
+
+            for field_name, field in pairs(model.fields) do
+                local col_def = Declarative.fieldToLua(field_name, field)
+                lines[#lines + 1] = '    ' .. col_def .. ','
+            end
+
+            lines[#lines + 1] = '})'
+            lines[#lines + 1] = ''
         end
 
-        lines[#lines + 1] = '})'
-        lines[#lines + 1] = ''
+        lines[#lines + 1] = 'return entities'
     end
 
     return table.concat(lines, '\n')
@@ -660,9 +701,12 @@ end
 function Declarative.fieldToDeclarative(field_name, field)
     -- If it's a simple field with no special options, use string format
     if not field.primary_key and not field.unique and not field.not_null and
-       not field.default and not field.default_now and not field.references then
+       not field.default and not field.default_now and not field.references and
+       not field.precision and not field.scale then
         if field.length and field.length ~= 255 then
             return string.format('%s = "%s(%d)"', field_name, field.type, field.length)
+        elseif field.type == "decimal" and field.precision and field.scale then
+            return string.format('%s = "%s(%d,%d)"', field_name, field.type, field.precision, field.scale)
         else
             return string.format('%s = "%s"', field_name, field.type)
         end
@@ -674,6 +718,14 @@ function Declarative.fieldToDeclarative(field_name, field)
 
     if field.length then
         parts[#parts + 1] = string.format('length = %d', field.length)
+    end
+
+    if field.precision then
+        parts[#parts + 1] = string.format('precision = %d', field.precision)
+    end
+
+    if field.scale then
+        parts[#parts + 1] = string.format('scale = %d', field.scale)
     end
 
     if field.primary_key then
