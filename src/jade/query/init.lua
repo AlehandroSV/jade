@@ -1,6 +1,7 @@
 local Expression = require("jade.query.expression")
 local Condition = require("jade.query.condition")
 local Instance = require("jade.entity.instance")
+local Quoting = require("jade.util.quoting")
 
 local Query = {}
 Query.__index = Query
@@ -223,10 +224,10 @@ function Query:_eagerLoad(instances)
                     -- Query pivot table to get mappings
                     local pivot_sql = string.format(
                         "SELECT %s, %s FROM %s WHERE %s IN (%s)",
-                        relation.source_foreign_key,
-                        relation.target_foreign_key,
-                        relation.join_table,
-                        relation.source_foreign_key,
+                        Quoting.quoteIdentifier(relation.source_foreign_key),
+                        Quoting.quoteIdentifier(relation.target_foreign_key),
+                        Quoting.quoteIdentifier(relation.join_table),
+                        Quoting.quoteIdentifier(relation.source_foreign_key),
                         string.rep("?", #source_ids)
                     )
                     local pivot_result = driver:execute(pivot_sql, source_ids)
@@ -388,7 +389,7 @@ function Query:sum(column)
     local q = Query.new(self._entity)
     q._where = self._where
     q._orderBy = self._orderBy
-    q._select = { "SUM(" .. column .. ") as sum" }
+    q._select = { "SUM(" .. Quoting.quoteIdentifier(column) .. ") as sum" }
     q._includes = self._includes
     q._joins = self._joins
     q._groupBy = self._groupBy
@@ -406,7 +407,7 @@ function Query:average(column)
     local q = Query.new(self._entity)
     q._where = self._where
     q._orderBy = self._orderBy
-    q._select = { "AVG(" .. column .. ") as avg" }
+    q._select = { "AVG(" .. Quoting.quoteIdentifier(column) .. ") as avg" }
     q._includes = self._includes
     q._joins = self._joins
     q._groupBy = self._groupBy
@@ -424,7 +425,7 @@ function Query:min(column)
     local q = Query.new(self._entity)
     q._where = self._where
     q._orderBy = self._orderBy
-    q._select = { "MIN(" .. column .. ") as min" }
+    q._select = { "MIN(" .. Quoting.quoteIdentifier(column) .. ") as min" }
     q._includes = self._includes
     q._joins = self._joins
     q._groupBy = self._groupBy
@@ -442,7 +443,7 @@ function Query:max(column)
     local q = Query.new(self._entity)
     q._where = self._where
     q._orderBy = self._orderBy
-    q._select = { "MAX(" .. column .. ") as max" }
+    q._select = { "MAX(" .. Quoting.quoteIdentifier(column) .. ") as max" }
     q._includes = self._includes
     q._joins = self._joins
     q._groupBy = self._groupBy

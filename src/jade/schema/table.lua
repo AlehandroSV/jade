@@ -1,3 +1,5 @@
+local Quoting = require("jade.util.quoting")
+
 local Table = {}
 Table.__index = Table
 
@@ -75,7 +77,7 @@ function Table:toSQL(driver)
     local parts = {}
 
     for _, col in ipairs(self.columns) do
-        local col_sql = "    " .. col._name .. " " .. driver:mapType(col)
+        local col_sql = "    " .. Quoting.quoteIdentifier(col._name) .. " " .. driver:mapType(col)
         if col._primary_key then
             col_sql = col_sql .. " PRIMARY KEY"
         end
@@ -89,7 +91,6 @@ function Table:toSQL(driver)
             if col._default == "CURRENT_TIMESTAMP" then
                 col_sql = col_sql .. " DEFAULT CURRENT_TIMESTAMP"
             elseif type(col._default) == "string" then
-                -- Quote string defaults
                 col_sql = col_sql .. " DEFAULT '" .. col._default:gsub("'", "''") .. "'"
             else
                 col_sql = col_sql .. " DEFAULT " .. tostring(col._default)
@@ -102,9 +103,9 @@ function Table:toSQL(driver)
     for _, fk in ipairs(self.foreign_keys) do
         local fk_sql = string.format(
             "    FOREIGN KEY (%s) REFERENCES %s(%s)",
-            fk.column,
-            fk.references_table,
-            fk.references_column
+            Quoting.quoteIdentifier(fk.column),
+            Quoting.quoteIdentifier(fk.references_table),
+            Quoting.quoteIdentifier(fk.references_column)
         )
         if fk.on_delete then
             fk_sql = fk_sql .. " ON DELETE " .. fk.on_delete:upper()
@@ -117,7 +118,7 @@ function Table:toSQL(driver)
 
     local sql = string.format(
         "CREATE TABLE %s (\n%s\n)",
-        self.name,
+        Quoting.quoteIdentifier(self.name),
         table.concat(parts, ",\n")
     )
 
@@ -130,12 +131,16 @@ function Table:indexSQL()
     for _, idx in ipairs(self.indexes) do
         local idx_name = idx.name or (self.name .. "_idx_" .. table.concat(idx.columns, "_"))
         local unique = idx.unique and "UNIQUE " or ""
+        local quoted_columns = {}
+        for _, col in ipairs(idx.columns) do
+            quoted_columns[#quoted_columns + 1] = Quoting.quoteIdentifier(col)
+        end
         statements[#statements + 1] = string.format(
             "CREATE %sINDEX %s ON %s (%s)",
             unique,
-            idx_name,
-            self.name,
-            table.concat(idx.columns, ", ")
+            Quoting.quoteIdentifier(idx_name),
+            Quoting.quoteIdentifier(self.name),
+            table.concat(quoted_columns, ", ")
         )
     end
     return statements

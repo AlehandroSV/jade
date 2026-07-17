@@ -1,3 +1,5 @@
+local Quoting = require("jade.util.quoting")
+
 local Schema = {}
 
 -- DDL operations that execute SQL directly
@@ -20,20 +22,20 @@ function Schema.createTable(driver, name, fn)
 end
 
 function Schema.dropTable(driver, name)
-    local sql = "DROP TABLE IF EXISTS " .. name .. " CASCADE"
+    local sql = "DROP TABLE IF EXISTS " .. Quoting.quoteIdentifier(name) .. " CASCADE"
     driver:execute(sql)
     return true
 end
 
 function Schema.renameTable(driver, old_name, new_name)
-    local sql = "ALTER TABLE " .. old_name .. " RENAME TO " .. new_name
+    local sql = "ALTER TABLE " .. Quoting.quoteIdentifier(old_name) .. " RENAME TO " .. Quoting.quoteIdentifier(new_name)
     driver:execute(sql)
     return true
 end
 
 function Schema.addColumn(driver, table_name, column_name, type_name, options)
     options = options or {}
-    local sql = "ALTER TABLE " .. table_name .. " ADD COLUMN " .. column_name .. " " .. type_name
+    local sql = "ALTER TABLE " .. Quoting.quoteIdentifier(table_name) .. " ADD COLUMN " .. Quoting.quoteIdentifier(column_name) .. " " .. type_name
 
     if options.length then
         sql = sql .. "(" .. options.length .. ")"
@@ -54,13 +56,13 @@ function Schema.addColumn(driver, table_name, column_name, type_name, options)
 end
 
 function Schema.dropColumn(driver, table_name, column_name)
-    local sql = "ALTER TABLE " .. table_name .. " DROP COLUMN " .. column_name
+    local sql = "ALTER TABLE " .. Quoting.quoteIdentifier(table_name) .. " DROP COLUMN " .. Quoting.quoteIdentifier(column_name)
     driver:execute(sql)
     return true
 end
 
 function Schema.renameColumn(driver, table_name, old_name, new_name)
-    local sql = "ALTER TABLE " .. table_name .. " RENAME COLUMN " .. old_name .. " TO " .. new_name
+    local sql = "ALTER TABLE " .. Quoting.quoteIdentifier(table_name) .. " RENAME COLUMN " .. Quoting.quoteIdentifier(old_name) .. " TO " .. Quoting.quoteIdentifier(new_name)
     driver:execute(sql)
     return true
 end
@@ -74,12 +76,17 @@ function Schema.addIndex(driver, table_name, columns, options)
     local index_name = options.name or (table_name .. "_idx_" .. table.concat(columns, "_"))
     local unique = options.unique and "UNIQUE " or ""
 
+    local quoted_columns = {}
+    for _, col in ipairs(columns) do
+        quoted_columns[#quoted_columns + 1] = Quoting.quoteIdentifier(col)
+    end
+
     local sql = string.format(
         "CREATE %sINDEX %s ON %s (%s)",
         unique,
-        index_name,
-        table_name,
-        table.concat(columns, ", ")
+        Quoting.quoteIdentifier(index_name),
+        Quoting.quoteIdentifier(table_name),
+        table.concat(quoted_columns, ", ")
     )
 
     driver:execute(sql)
@@ -87,19 +94,20 @@ function Schema.addIndex(driver, table_name, columns, options)
 end
 
 function Schema.dropIndex(driver, table_name, index_name)
-    local sql = "DROP INDEX IF EXISTS " .. index_name
+    local sql = "DROP INDEX IF EXISTS " .. Quoting.quoteIdentifier(index_name)
     driver:execute(sql)
     return true
 end
 
 function Schema.addForeignKey(driver, table_name, options)
+    local constraint_name = options.constraint_name or (table_name .. "_fk_" .. options.column)
     local sql = string.format(
         "ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s)",
-        table_name,
-        options.constraint_name or (table_name .. "_fk_" .. options.column),
-        options.column,
-        options.references_table,
-        options.references_column or "id"
+        Quoting.quoteIdentifier(table_name),
+        Quoting.quoteIdentifier(constraint_name),
+        Quoting.quoteIdentifier(options.column),
+        Quoting.quoteIdentifier(options.references_table),
+        Quoting.quoteIdentifier(options.references_column or "id")
     )
 
     if options.on_delete then
@@ -116,8 +124,8 @@ end
 function Schema.dropForeignKey(driver, table_name, constraint_name)
     local sql = string.format(
         "ALTER TABLE %s DROP CONSTRAINT %s",
-        table_name,
-        constraint_name
+        Quoting.quoteIdentifier(table_name),
+        Quoting.quoteIdentifier(constraint_name)
     )
     driver:execute(sql)
     return true

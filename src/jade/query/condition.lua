@@ -1,3 +1,5 @@
+local Quoting = require("jade.util.quoting")
+
 local Condition = {}
 Condition.__index = Condition
 
@@ -64,9 +66,9 @@ function Condition:compile(bindings)
 
     local col_ref
     if self.table_name and self.table_name ~= "" then
-        col_ref = self.table_name .. "." .. self.column
+        col_ref = Quoting.quoteIdentifier(self.table_name) .. "." .. Quoting.quoteIdentifier(self.column)
     else
-        col_ref = self.column
+        col_ref = Quoting.quoteIdentifier(self.column)
     end
 
     -- Special handling for IS NULL / IS NOT NULL

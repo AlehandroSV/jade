@@ -1,6 +1,7 @@
 local Driver = require("jade.driver.base")
 local pgmoon = require("pgmoon")
 local Pool = require("jade.driver.pool")
+local Quoting = require("jade.util.quoting")
 
 local PostgreSQL = {}
 PostgreSQL.__index = PostgreSQL
@@ -175,12 +176,12 @@ function PostgreSQL:generateSelect(query)
     end
 
     -- FROM clause
-    sql[#sql + 1] = "FROM " .. query._table
+    sql[#sql + 1] = "FROM " .. Quoting.quoteIdentifier(query._table)
 
     -- JOIN clauses
     if #query._joins > 0 then
         for _, join in ipairs(query._joins) do
-            local join_sql = join.type .. " JOIN " .. join.table .. " ON "
+            local join_sql = join.type .. " JOIN " .. Quoting.quoteIdentifier(join.table) .. " ON "
             local on_sql, on_bindings = join.on:compile()
             for _, b in ipairs(on_bindings) do
                 bindings[#bindings + 1] = b
@@ -220,7 +221,7 @@ function PostgreSQL:generateSelect(query)
             if type(col) == "table" and col._column then
                 col_name = col._column
             end
-            group_parts[#group_parts + 1] = col_name
+            group_parts[#group_parts + 1] = Quoting.quoteIdentifier(col_name)
         end
         sql[#sql + 1] = "GROUP BY " .. table.concat(group_parts, ", ")
     end
@@ -245,7 +246,7 @@ function PostgreSQL:generateSelect(query)
     if #query._orderBy > 0 then
         local order_parts = {}
         for _, o in ipairs(query._orderBy) do
-            order_parts[#order_parts + 1] = o.column .. " " .. o.dir
+            order_parts[#order_parts + 1] = Quoting.quoteIdentifier(o.column) .. " " .. o.dir
         end
         sql[#sql + 1] = "ORDER BY " .. table.concat(order_parts, ", ")
     end
@@ -270,7 +271,7 @@ function PostgreSQL:generateInsert(table_name, data, entity)
     local i = 1
 
     for key, value in pairs(data) do
-        columns[#columns + 1] = key
+        columns[#columns + 1] = Quoting.quoteIdentifier(key)
         placeholders[#placeholders + 1] = "$" .. i
         bindings[#bindings + 1] = value
         i = i + 1
@@ -278,7 +279,7 @@ function PostgreSQL:generateInsert(table_name, data, entity)
 
     local sql = string.format(
         "INSERT INTO %s (%s) VALUES (%s) RETURNING *",
-        table_name,
+        Quoting.quoteIdentifier(table_name),
         table.concat(columns, ", "),
         table.concat(placeholders, ", ")
     )
@@ -292,7 +293,7 @@ function PostgreSQL:generateUpdate(table_name, data, where)
     local i = 1
 
     for key, value in pairs(data) do
-        set_parts[#set_parts + 1] = key .. " = $" .. i
+        set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = $" .. i
         bindings[#bindings + 1] = value
         i = i + 1
     end
@@ -312,7 +313,7 @@ function PostgreSQL:generateUpdate(table_name, data, where)
 
     local sql = string.format(
         "UPDATE %s SET %s WHERE %s RETURNING *",
-        table_name,
+        Quoting.quoteIdentifier(table_name),
         table.concat(set_parts, ", "),
         where_sql
     )
@@ -332,7 +333,7 @@ function PostgreSQL:generateDelete(table_name, where)
 
     local sql = string.format(
         "DELETE FROM %s WHERE %s RETURNING *",
-        table_name,
+        Quoting.quoteIdentifier(table_name),
         where_sql
     )
 
