@@ -79,4 +79,16 @@ function Driver:dropTableCascade()
     return true
 end
 
+-- Returns true if the database supports AUTO_INCREMENT syntax.
+-- Override in drivers that support AUTO_INCREMENT (e.g., MySQL).
+function Driver:supportsAutoIncrement()
+    return false
+end
+
+-- Quote an identifier for the specific database.
+-- Override in drivers that use different quoting (e.g., MySQL uses backticks).
+function Driver:quoteIdentifier(name)
+    return '"' .. name:gsub('"', '""') .. '"'
+end
+
 return Driver

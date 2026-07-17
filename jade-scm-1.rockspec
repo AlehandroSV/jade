@@ -17,6 +17,12 @@ description = {
 dependencies = {
     "lua >= 5.1, < 5.5"
 }
+
+-- Optional dependencies for database drivers
+-- Uncomment the ones you need:
+-- "luasql-postgres",    -- PostgreSQL driver
+-- "luasql-mysql",       -- MySQL driver
+-- "luasql-sqlite3",     -- SQLite driver
 build = {
     type = "builtin",
     modules = {

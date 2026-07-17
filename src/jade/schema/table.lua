@@ -16,7 +16,7 @@ end
 function Table:column(name, type_name, options)
     options = options or {}
     local Column = require("jade.schema.column")
-    local col = Column.new(nil, type_name, options.length)
+    local col = Column.new(nil, type_name, options.length, options.precision, options.scale)
     col._name = name
     col._table = self.name
 
@@ -97,8 +97,8 @@ function Table:toSQL(driver)
         local col_sql = "    " .. Quoting.quoteIdentifier(col._name) .. " " .. driver:mapType(col)
         if col._primary_key then
             col_sql = col_sql .. " PRIMARY KEY"
-            -- Add AUTO_INCREMENT for MySQL if auto_increment is set
-            if col._auto_increment and driver:dropTableCascade() == false then
+            -- Add AUTO_INCREMENT for databases that support it
+            if col._auto_increment and driver:supportsAutoIncrement() then
                 col_sql = col_sql .. " AUTO_INCREMENT"
             end
         end

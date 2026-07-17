@@ -33,7 +33,7 @@ end
 function Pool:_isConnectionAlive(conn)
     -- Try a simple ping to check if connection is alive
     local ok, result = pcall(function()
-        return conn:query("SELECT 1")
+        return self.driver:executeWithConnection(conn, "SELECT 1")
     end)
     return ok and result ~= nil
 end

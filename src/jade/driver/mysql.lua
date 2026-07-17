@@ -1,5 +1,4 @@
 local Driver = require("jade.driver.base")
-local mysql = require("luasql.mysql")
 local Pool = require("jade.driver.pool")
 
 local MySQL = {}
@@ -15,7 +14,7 @@ function MySQL.new()
     self._conn = nil
     self._config = nil
     self._pool = nil
-    self._env = mysql.mysql()
+    self._env = nil
     return self
 end
 
@@ -27,6 +26,12 @@ function MySQL:connect(config)
         user = config.user or "root",
         password = config.password or ""
     }
+
+    -- Initialize luasql environment
+    if not self._env then
+        local mysql = require("luasql.mysql")
+        self._env = mysql.mysql()
+    end
 
     -- Initialize connection pool if pool_size is specified
     if config.pool_size then
@@ -42,6 +47,13 @@ end
 
 function MySQL:_ensureConnected()
     if self._conn then return end
+
+    -- Initialize luasql environment if not already done
+    if not self._env then
+        local mysql = require("luasql.mysql")
+        self._env = mysql.mysql()
+    end
+
     local conn, err = self._env:connect(
         self._config.database,
         self._config.user,
@@ -68,6 +80,11 @@ function MySQL:disconnect()
         self._env:close()
         self._env = nil
     end
+end
+
+-- Quote identifier with backticks for MySQL
+function MySQL:quoteIdentifier(name)
+    return "`" .. name:gsub("`", "``") .. "`"
 end
 
 -- Transaction methods
@@ -106,29 +123,34 @@ function MySQL:rollbackTransaction(conn)
     end
 end
 
-function MySQL:executeWithConnection(conn, sql, bindings)
-    if bindings and #bindings > 0 then
-        -- Convert ? placeholders to :n style for luasql
-        local params = {}
-        local idx = 1
-        sql = sql:gsub("%?", function()
-            local name = "p" .. idx
-            params[name] = bindings[idx]
-            idx = idx + 1
-            return ":" .. name
-        end)
-        local res, err = conn:execute(sql, params)
-        if not res then
-            error("Query failed: " .. tostring(err))
-        end
-        return res
-    else
-        local res, err = conn:execute(sql)
-        if not res then
-            error("Query failed: " .. tostring(err))
-        end
-        return res
+-- Helper to convert ? placeholders to :n style for luasql
+local function convertPlaceholders(sql, bindings)
+    if not bindings or #bindings == 0 then
+        return sql, nil
     end
+    local params = {}
+    local idx = 1
+    sql = sql:gsub("%?", function()
+        local name = "p" .. idx
+        params[name] = bindings[idx]
+        idx = idx + 1
+        return ":" .. name
+    end)
+    return sql, params
+end
+
+function MySQL:executeWithConnection(conn, sql, bindings)
+    local converted_sql, params = convertPlaceholders(sql, bindings)
+    local res, err
+    if params then
+        res, err = conn:execute(converted_sql, params)
+    else
+        res, err = conn:execute(converted_sql)
+    end
+    if not res then
+        error("Query failed: " .. tostring(err))
+    end
+    return res
 end
 
 function MySQL:execute(sql, bindings)
@@ -139,27 +161,17 @@ function MySQL:execute(sql, bindings)
 
     -- Otherwise use shared connection
     self:_ensureConnected()
-    if bindings and #bindings > 0 then
-        -- Convert ? placeholders to :n style for luasql
-        local params = {}
-        local idx = 1
-        sql = sql:gsub("%?", function()
-            local name = "p" .. idx
-            params[name] = bindings[idx]
-            idx = idx + 1
-            return ":" .. name
-        end)
-        local res, err = self._conn:execute(sql, params)
-        if not res then
-            error("Query failed: " .. tostring(err))
-        end
-        return res
+    local converted_sql, params = convertPlaceholders(sql, bindings)
+    local res, err
+    if params then
+        res, err = self._conn:execute(converted_sql, params)
     else
-        local res, err = self._conn:execute(sql)
-        if not res then
-            error("Query failed: " .. tostring(err))
-        end
-        return res
+        res, err = self._conn:execute(converted_sql)
+    end
+    if not res then
+        error("Query failed: " .. tostring(err))
+    end
+    return res
     end
 end
 
@@ -186,6 +198,10 @@ end
 
 function MySQL:dropTableCascade()
     return false
+end
+
+function MySQL:supportsAutoIncrement()
+    return true
 end
 
 function MySQL:generateSelect(query)
