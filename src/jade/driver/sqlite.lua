@@ -144,7 +144,7 @@ function SQLite:executeWithConnection(conn, sql, bindings)
     else
         res, err = conn:execute(converted_sql)
     end
-    if not res then
+    if res == nil then
         error("Query failed: " .. tostring(err))
     end
     return res
@@ -165,7 +165,7 @@ function SQLite:execute(sql, bindings)
     else
         res, err = self._conn:execute(converted_sql)
     end
-    if not res then
+    if res == nil then
         error("Query failed: " .. tostring(err))
     end
     return res
