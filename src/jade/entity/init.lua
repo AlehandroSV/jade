@@ -4,6 +4,7 @@ local Instance = require("jade.entity.instance")
 local Relations = require("jade.entity.relations")
 local Validations = require("jade.entity.validations")
 local Callbacks = require("jade.entity.callbacks")
+local Events = require("jade.entity.events")
 
 local Entity = {}
 Entity.__index = function(self, key)
@@ -282,6 +283,9 @@ function Entity:create(data)
         Callbacks.run(self, "after_create", instance, data)
         Callbacks.run(self, "after_save", instance, data)
 
+        -- Fire built-in event
+        Events.fire(self, "created", { instance = instance, data = data })
+
         return instance
     end)
 
@@ -324,6 +328,9 @@ function Entity:update(id, data)
         Callbacks.run(self, "after_update", instance, update_data)
         Callbacks.run(self, "after_save", instance, update_data)
 
+        -- Fire built-in event
+        Events.fire(self, "updated", { instance = instance, data = update_data })
+
         return instance
     end)
 
@@ -343,12 +350,13 @@ function Entity:delete(id)
 
     Callbacks.run(self, "after_delete", instance, { id = id })
 
+    -- Fire built-in event
+    Events.fire(self, "deleted", { instance = instance, data = { id = id } })
+
     return instance
 end
 
 -- Events
-local Events = require("jade.entity.events")
-
 function Entity:events(names)
     Events.define(self, names)
     return self
@@ -356,6 +364,7 @@ end
 
 function Entity:fire(name, data)
     Events.fire(self, name, data)
+    return self
 end
 
 -- Optimistic Locking

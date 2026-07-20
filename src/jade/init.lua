@@ -38,6 +38,9 @@ Jade.transaction = require("jade.transaction.manager")
 -- Soft Delete
 Jade.SoftDelete = require("jade.entity.soft_delete")
 
+-- Events
+Jade.Events = require("jade.entity.events")
+
 -- Security
 Jade.security = require("jade.security")
 
@@ -119,6 +122,11 @@ end
 
 function Jade.raw(sql, ...)
     return { _raw = sql, _bindings = { ... } }
+end
+
+-- Event convenience
+function Jade.on(event_name, handler)
+    return Jade.Events.on(event_name, handler)
 end
 
 -- DDL shortcuts (delegate to Schema module with current driver)
