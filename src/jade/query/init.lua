@@ -21,6 +21,8 @@ function Query.new(entity)
         _groupBy = {},
         _having = {},
         _distinct = false,
+        _cache_ttl = nil,
+        _cache_key = nil,
     }, Query)
 end
 
@@ -123,7 +125,21 @@ function Query:having(condition)
     return self
 end
 
+function Query:cache(ttl, key)
+    self._cache_ttl = ttl
+    self._cache_key = key
+    return self
+end
+
 function Query:get()
+    -- Check cache if enabled
+    if self._cache_ttl then
+        local Cache = require("jade.cache")
+        local cache_key = self._cache_key or Cache.keygen(self._table, { self:toSQL() })
+        local cached = Cache.get(cache_key)
+        if cached then return cached end
+    end
+
     local sql, bindings = self:toSQL()
     local driver = self._entity._driver
     local raw = driver:execute(sql, bindings)
@@ -139,6 +155,13 @@ function Query:get()
     -- Eager load included relations
     if #self._includes > 0 then
         self:_eagerLoad(instances)
+    end
+
+    -- Store in cache if enabled
+    if self._cache_ttl then
+        local Cache = require("jade.cache")
+        local cache_key = self._cache_key or Cache.keygen(self._table, { self:toSQL() })
+        Cache.set(cache_key, instances, self._cache_ttl)
     end
 
     return instances
