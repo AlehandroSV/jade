@@ -25,6 +25,21 @@ function Query.new(entity)
 end
 
 function Query:where(condition)
+    if type(condition) == "table" and condition._raw and not condition.compile then
+        local raw_sql = condition._raw
+        local raw_bindings = condition._bindings or {}
+        condition = {
+            _raw = raw_sql,
+            _bindings = raw_bindings,
+            compile = function(self, bindings_out)
+                bindings_out = bindings_out or {}
+                for _, v in ipairs(self._bindings) do
+                    bindings_out[#bindings_out + 1] = v
+                end
+                return self._raw, bindings_out
+            end,
+        }
+    end
     self._where[#self._where + 1] = condition
     return self
 end
@@ -460,6 +475,115 @@ end
 function Query:paginate(options)
     local paginate = require("jade.query.paginate")
     return paginate.paginate(self, options)
+end
+
+function Query:exists()
+    return self:count() > 0
+end
+
+function Query:empty()
+    return self:count() == 0
+end
+
+function Query:pluck(column)
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._orderBy = self._orderBy
+    q._select = { Quoting.quoteIdentifier(column) }
+    q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
+    q._limit = self._limit
+    q._offset = self._offset
+    local sql, bindings = q:toSQL()
+    local driver = self._entity._driver
+    local result = driver:execute(sql, bindings)
+    local values = {}
+    for i, row in ipairs(result) do
+        values[i] = row[column]
+    end
+    return values
+end
+
+function Query:take(n)
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._orderBy = { { column = "RANDOM()", dir = "" } }
+    q._select = self._select
+    q._includes = self._includes
+    q._joins = self._joins
+    q._groupBy = self._groupBy
+    q._having = self._having
+    q._distinct = self._distinct
+    q._limit = n
+    q._offset = nil
+    return q:get()
+end
+
+function Query:inBatches(batchSize, fn)
+    local offset = 0
+    while true do
+        local q = Query.new(self._entity)
+        q._where = self._where
+        q._orderBy = self._orderBy
+        q._select = self._select
+        q._includes = self._includes
+        q._joins = self._joins
+        q._groupBy = self._groupBy
+        q._having = self._having
+        q._distinct = self._distinct
+        q._limit = batchSize
+        q._offset = offset
+        local batch = q:get()
+        if #batch == 0 then break end
+        fn(batch)
+        offset = offset + batchSize
+        if #batch < batchSize then break end
+    end
+end
+
+function Query:as(alias)
+    return {
+        _query = self,
+        _alias = alias,
+    }
+end
+
+function Query:updateAll(data)
+    local driver = self._entity._driver
+    local where = self:_compileWhere()
+    local sql, bindings = driver:generateBulkUpdate(self._table, data, where)
+    local result = driver:execute(sql, bindings)
+    return result
+end
+
+function Query:deleteAll()
+    local driver = self._entity._driver
+    local where = self:_compileWhere()
+    local sql, bindings = driver:generateBulkDelete(self._table, where)
+    local result = driver:execute(sql, bindings)
+    return result
+end
+
+function Query:_compileWhere()
+    local Condition = require("jade.query.condition")
+
+    if #self._where == 0 then
+        -- Return a condition that matches all rows (always true)
+        return Condition.new("1", "=", 1, "")
+    end
+
+    if #self._where == 1 then
+        return self._where[1]
+    end
+
+    local result = self._where[1]
+    for i = 2, #self._where do
+        result = result:band(self._where[i])
+    end
+    return result
 end
 
 function Query:toSQL()

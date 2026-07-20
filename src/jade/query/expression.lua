@@ -89,4 +89,28 @@ function Expression:isNotNull()
     return Condition.new(self._column, "IS NOT", nil, self._table)
 end
 
+function Expression:as(alias)
+    return {
+        _column = self._column,
+        _table = self._table,
+        _alias = alias,
+    }
+end
+
+function Expression.raw(sql, ...)
+    local bindings = { ... }
+    local raw = {
+        _raw = sql,
+        _bindings = bindings,
+    }
+    function raw:compile(bindings_out)
+        bindings_out = bindings_out or {}
+        for _, v in ipairs(self._bindings) do
+            bindings_out[#bindings_out + 1] = v
+        end
+        return self._raw, bindings_out
+    end
+    return raw
+end
+
 return Expression

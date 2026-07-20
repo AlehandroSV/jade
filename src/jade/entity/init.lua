@@ -197,6 +197,26 @@ function Entity:paginate(options)
     return paginate.paginate(Query.new(self), options)
 end
 
+function Entity:exists()
+    return Query.new(self):exists()
+end
+
+function Entity:empty()
+    return Query.new(self):empty()
+end
+
+function Entity:pluck(column)
+    return Query.new(self):pluck(column)
+end
+
+function Entity:take(n)
+    return Query.new(self):take(n)
+end
+
+function Entity:inBatches(batchSize, fn)
+    return Query.new(self):inBatches(batchSize, fn)
+end
+
 -- CRUD with validation and callbacks
 function Entity:create(data)
     -- Run validations

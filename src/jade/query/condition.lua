@@ -78,6 +78,14 @@ function Condition:compile(bindings)
 
     -- Special handling for IN clause
     if self.op == "IN" then
+        -- Subquery support: if value has toSQL, treat as subquery
+        if type(self.value) == "table" and self.value.toSQL then
+            local sub_sql, sub_bindings = self.value:toSQL()
+            for _, v in ipairs(sub_bindings) do
+                bindings[#bindings + 1] = v
+            end
+            return col_ref .. " IN (" .. sub_sql .. ")", bindings
+        end
         local placeholders = {}
         for i = 1, #self.value do
             placeholders[i] = "?"
@@ -88,6 +96,14 @@ function Condition:compile(bindings)
 
     -- Special handling for NOT IN clause
     if self.op == "NOT IN" then
+        -- Subquery support: if value has toSQL, treat as subquery
+        if type(self.value) == "table" and self.value.toSQL then
+            local sub_sql, sub_bindings = self.value:toSQL()
+            for _, v in ipairs(sub_bindings) do
+                bindings[#bindings + 1] = v
+            end
+            return col_ref .. " NOT IN (" .. sub_sql .. ")", bindings
+        end
         local placeholders = {}
         for i = 1, #self.value do
             placeholders[i] = "?"
