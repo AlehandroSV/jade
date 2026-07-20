@@ -61,6 +61,11 @@ function Jade.configure(opts)
         Jade.i18n.setLocale(opts.locale)
     end
 
+    -- Support URL-based configuration
+    if opts.url then
+        opts = Jade.config.parseURL(opts.url)
+    end
+
     if opts.database then
         Jade.config.set(opts)
     end
@@ -73,6 +78,12 @@ function Jade.configure(opts)
     current_driver:connect(db)
 
     return current_driver
+end
+
+-- Configure from environment-specific config files
+function Jade.configureFromEnvironment(basePath)
+    local env_config = Jade.config.loadForEnvironment(basePath)
+    return Jade.configure(env_config)
 end
 
 function Jade.driver()
