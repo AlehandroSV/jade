@@ -27,12 +27,14 @@ Entity.__index = function(self, key)
     return nil
 end
 
-function Entity.new(table_name, columns)
+function Entity.new(table_name, columns, options)
+    options = options or {}
     local model = setmetatable({
         _table = table_name,
         _columns = columns,
         _relations = {},
         _driver = nil,
+        _database = options.database or nil,
         _validations = {},
         _callbacks = {},
         _scopes = {},
@@ -47,6 +49,15 @@ function Entity.new(table_name, columns)
     -- Setup validations and callbacks
     Validations.setup(model)
     Callbacks.setup(model)
+
+    -- Auto-connect to assigned database if available
+    if model._database then
+        local Database = require("jade.database")
+        local ok, driver = pcall(Database.connect, model._database)
+        if ok then
+            model:configure(driver)
+        end
+    end
 
     return model
 end
