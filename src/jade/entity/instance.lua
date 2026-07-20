@@ -25,7 +25,19 @@ function Instance:update(data)
     if not id then
         error("Cannot update instance without id")
     end
-    self._entity:update(id, data)
+
+    -- Pass version from instance data for optimistic locking
+    if self._entity._optimistic_locking then
+        local version_col = self._entity._optimistic_locking.column
+        if data[version_col] == nil and self._data[version_col] ~= nil then
+            data[version_col] = self._data[version_col]
+        end
+    end
+
+    local result = self._entity:update(id, data)
+    if result == nil then
+        return nil
+    end
     for k, v in pairs(data) do
         self._data[k] = v
     end
