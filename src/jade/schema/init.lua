@@ -134,4 +134,49 @@ function Schema.dropForeignKey(driver, table_name, constraint_name)
     return true
 end
 
+-- View operations
+function Schema.createView(driver, name, query)
+    local sql, bindings = query:toSQL()
+    local view_sql = string.format(
+        "CREATE VIEW %s AS %s",
+        Quoting.quoteIdentifier(name),
+        sql
+    )
+    driver:execute(view_sql, bindings)
+    return true
+end
+
+function Schema.View(driver, name)
+    local ViewQuery = {}
+    ViewQuery.__index = ViewQuery
+
+    function ViewQuery.new(view_name)
+        return setmetatable({
+            _view_name = view_name,
+            _driver = driver,
+        }, ViewQuery)
+    end
+
+    function ViewQuery:toSQL()
+        local sql = string.format(
+            "SELECT * FROM %s",
+            Quoting.quoteIdentifier(self._view_name)
+        )
+        return sql, {}
+    end
+
+    function ViewQuery:get()
+        local sql, bindings = self:toSQL()
+        return self._driver:execute(sql, bindings)
+    end
+
+    return ViewQuery.new(name)
+end
+
+function Schema.dropView(driver, name)
+    local sql = "DROP VIEW IF EXISTS " .. Quoting.quoteIdentifier(name)
+    driver:execute(sql)
+    return true
+end
+
 return Schema
