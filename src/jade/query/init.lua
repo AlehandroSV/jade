@@ -620,4 +620,9 @@ function Query:deleteAll()
     return driver:execute(sql, bindings)
 end
 
+function Query:as(alias)
+    return { _query = self, _alias = alias }
+end
+end
+
 return Query
