@@ -17,6 +17,11 @@ Jade.Float = require("jade.types.float")
 Jade.Decimal = require("jade.types.decimal")
 Jade.UUID = require("jade.types.uuid")
 Jade.Date = require("jade.types.date")
+Jade.CUID = require("jade.types.cuid")
+Jade.NanoID = require("jade.types.nanoid")
+Jade.BigInt = require("jade.types.bigint")
+Jade.JSON = require("jade.types.json")
+Jade.Enum = require("jade.types.enum")
 
 -- Entity
 Jade.Entity = require("jade.entity")

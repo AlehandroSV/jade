@@ -165,6 +165,9 @@ local test_files = {
     "security/escape_spec.lua",
             "introspection/converter_spec.lua",
         "errors/errors_spec.lua",
+    "schema/views_spec.lua",
+    "entity/events_spec.lua",
+    "entity/scopes_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")

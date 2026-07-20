@@ -537,7 +537,16 @@ end
 function Query:take(n)
     local q = Query.new(self._entity)
     q._where = self._where
-    q._orderBy = { { column = "RANDOM()", dir = "" } }
+    -- Use driver-appropriate random function
+    local random_fn = "RANDOM()"  -- PostgreSQL, SQLite
+    local driver = self._entity._driver
+    if driver and driver.class and driver.class.__index then
+        local name = tostring(driver.class)
+        if name:find("MySQL") then
+            random_fn = "RAND()"
+        end
+    end
+    q._orderBy = { { column = random_fn, dir = "" } }
     q._select = self._select
     q._includes = self._includes
     q._joins = self._joins
@@ -616,40 +625,6 @@ end
 function Query:toSQL()
     local driver = self._entity._driver
     return driver:generateSelect(self)
-end
-
-function Query:_compileWhere()
-    local Condition = require("jade.query.condition")
-    if #self._where == 0 then
-        return Condition.new("1", "=", 1, "")
-    end
-    if #self._where == 1 then
-        return self._where[1]
-    end
-    local result = self._where[1]
-    for i = 2, #self._where do
-        result = result:band(self._where[i])
-    end
-    return result
-end
-
-function Query:updateAll(data)
-    local driver = self._entity._driver
-    local where = self:_compileWhere()
-    local sql, bindings = driver:generateBulkUpdate(self._table, data, where)
-    return driver:execute(sql, bindings)
-end
-
-function Query:deleteAll()
-    local driver = self._entity._driver
-    local where = self:_compileWhere()
-    local sql, bindings = driver:generateBulkDelete(self._table, where)
-    return driver:execute(sql, bindings)
-end
-
-function Query:as(alias)
-    return { _query = self, _alias = alias }
-end
 end
 
 return Query

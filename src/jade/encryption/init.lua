@@ -1,5 +1,9 @@
 local M = {}
 
+-- WARNING: XOR+base64 is obfuscation, NOT encryption.
+-- For production use requiring real security, integrate with a cryptographic library.
+-- This module is provided for basic data masking and convenience only.
+
 -- Encryption config
 local enc_config = {
     key = nil,
@@ -77,6 +81,23 @@ function M.getEncryptedFields(entity_name, columns)
 end
 
 -- XOR-based encrypt/decrypt (simple, no external deps)
+-- Lua 5.1 compatible XOR for bytes using arithmetic
+local function xorByte(a, b)
+    local result = 0
+    local power = 1
+    for _ = 1, 8 do
+        local abit = a % 2
+        local bbit = b % 2
+        if abit ~= bbit then
+            result = result + power
+        end
+        a = math.floor(a / 2)
+        b = math.floor(b / 2)
+        power = power * 2
+    end
+    return result
+end
+
 local function xorCrypt(data, key)
     if not key or key == "" then return data end
     local result = {}
@@ -84,7 +105,7 @@ local function xorCrypt(data, key)
     for i = 1, #data do
         local dataByte = string.byte(data, i)
         local keyByte = string.byte(key, (i - 1) % keyLen + 1)
-        result[i] = string.char(dataByte ~ keyByte)
+        result[i] = string.char(xorByte(dataByte, keyByte))
     end
     return table.concat(result)
 end

@@ -252,7 +252,6 @@ function Entity:upsert(data, conflict_columns)
     local sql, bindings = self._driver:generateUpsert(self._table, data, conflict_columns, self)
     return self._driver:execute(sql, bindings)
 end
-end
 
 -- CRUD with validation and callbacks
 function Entity:create(data)
@@ -290,24 +289,28 @@ function Entity:create(data)
 end
 
 function Entity:update(id, data)
+    -- Copy data to avoid mutating caller's table
+    local update_data = {}
+    for k, v in pairs(data) do update_data[k] = v end
+    update_data.id = id
+
     -- Run validations
-    data.id = id
-    local errors = self:validate(data)
+    local errors = self:validate(update_data)
     if errors then
         error("Validation failed: " .. table.concat(errors, ", "))
     end
 
     -- Run around callbacks
-    local result = Callbacks.runAround(self, "around_save", nil, data, function()
-        Callbacks.run(self, "before_save", nil, data)
-        Callbacks.run(self, "before_update", nil, data)
+    local result = Callbacks.runAround(self, "around_save", nil, update_data, function()
+        Callbacks.run(self, "before_save", nil, update_data)
+        Callbacks.run(self, "before_update", nil, update_data)
 
         local Condition = require("jade.query.condition")
         local where = Condition.new("id", "=", id, self._table)
 
         -- Encrypt fields before update
         local Encryption = require("jade.encryption")
-        local enc_data = Encryption.encryptFields(self._table, data, self._columns)
+        local enc_data = Encryption.encryptFields(self._table, update_data, self._columns)
 
         local sql, bindings = self._driver:generateUpdate(self._table, enc_data, where)
         local result = self._driver:execute(sql, bindings)
@@ -318,8 +321,8 @@ function Entity:update(id, data)
 
         local instance = Instance.new(self, row)
 
-        Callbacks.run(self, "after_update", instance, data)
-        Callbacks.run(self, "after_save", instance, data)
+        Callbacks.run(self, "after_update", instance, update_data)
+        Callbacks.run(self, "after_save", instance, update_data)
 
         return instance
     end)
@@ -341,6 +344,66 @@ function Entity:delete(id)
     Callbacks.run(self, "after_delete", instance, { id = id })
 
     return instance
+end
+
+-- Events
+local Events = require("jade.entity.events")
+
+function Entity:events(names)
+    Events.define(self, names)
+    return self
+end
+
+function Entity:fire(name, data)
+    Events.fire(self, name, data)
+end
+
+-- Optimistic Locking
+function Entity:optimisticLocking(options)
+    options = options or {}
+    local column = options.column or "version"
+
+    -- Add version column to entity
+    local Integer = require("jade.types.integer")
+    self._columns[column] = Integer():default(1)
+    self._columns[column]._name = column
+    self._columns[column]._table = self._table
+
+    -- Store config
+    self._optimistic_locking = { column = column }
+
+    -- Override update to include version check
+    local original_update = self.update
+    self.update = function(self, id, data)
+        -- Copy data to avoid mutating caller's table
+        local update_data = {}
+        for k, v in pairs(data) do update_data[k] = v end
+
+        -- Add version condition if not already set
+        local Condition = require("jade.query.condition")
+        if update_data[column] == nil then
+            -- Get current version from database
+            local current = self:find(id)
+            if current and current._data[column] ~= nil then
+                update_data[column] = current._data[column]
+            end
+        end
+
+        local version_value = update_data[column]
+        update_data[column] = (version_value or 0) + 1
+
+        -- Run the original update with version in data
+        local result = original_update(self, id, update_data)
+
+        -- Check if update affected any rows (conflict detection)
+        if result == nil then
+            return nil
+        end
+
+        return result
+    end
+
+    return self
 end
 
 return Entity

@@ -199,6 +199,9 @@ function MySQL:mapType(column_type)
         date = "DATE",
         datetime = "DATETIME",
         json = "JSON",
+        cuid = "VARCHAR(25)",
+        nanoid = "VARCHAR(21)",
+        enum = "TEXT",
     }
     return map[column_type.type] or "TEXT"
 end

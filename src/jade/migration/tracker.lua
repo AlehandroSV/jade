@@ -37,12 +37,12 @@ function M.recordMigration(driver, name)
     if ok and versionModule then
         version = versionModule
     end
-    local sql = "INSERT INTO _jade_migrations (name, jade_version) VALUES ($1, $2)"
+    local sql = "INSERT INTO _jade_migrations (name, jade_version) VALUES (?, ?)"
     return driver:execute(sql, { name, version })
 end
 
 function M.removeMigration(driver, name)
-    local sql = "DELETE FROM _jade_migrations WHERE name = $1"
+    local sql = "DELETE FROM _jade_migrations WHERE name = ?"
     return driver:execute(sql, { name })
 end
 

@@ -143,7 +143,7 @@ function PostgreSQL:mapType(column_type)
         string = "VARCHAR(" .. (column_type.length or 255) .. ")",
         text = "TEXT",
         integer = "INTEGER",
-        bigint = "BIGSERIAL",
+        bigint = "BIGINT",
         float = "DOUBLE PRECISION",
         decimal = "NUMERIC(" .. (column_type.precision or 10) .. "," .. (column_type.scale or 2) .. ")",
         boolean = "BOOLEAN",
@@ -151,6 +151,9 @@ function PostgreSQL:mapType(column_type)
         date = "DATE",
         uuid = "UUID",
         json = "JSONB",
+        cuid = "VARCHAR(25)",
+        nanoid = "VARCHAR(21)",
+        enum = "TEXT",
     }
     return map[column_type.type] or "TEXT"
 end

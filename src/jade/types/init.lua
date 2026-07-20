@@ -8,6 +8,11 @@ local types = {
     Decimal = require("jade.types.decimal"),
     UUID = require("jade.types.uuid"),
     Date = require("jade.types.date"),
+    CUID = require("jade.types.cuid"),
+    NanoID = require("jade.types.nanoid"),
+    BigInt = require("jade.types.bigint"),
+    JSON = require("jade.types.json"),
+    Enum = require("jade.types.enum"),
 }
 
 return types

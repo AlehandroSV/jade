@@ -1,4 +1,5 @@
 local M = {}
+local Quoting = require("jade.util.quoting")
 
 -- Test helper state
 local test_state = {
@@ -28,7 +29,7 @@ end
 function M.truncateAll(driver, tables)
     if tables then
         for _, table_name in ipairs(tables) do
-            driver:execute("TRUNCATE TABLE " .. table_name .. " CASCADE")
+            driver:execute("TRUNCATE TABLE " .. Quoting.quoteIdentifier(table_name) .. " CASCADE")
         end
     else
         -- Get all tables and truncate
@@ -36,7 +37,7 @@ function M.truncateAll(driver, tables)
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND type = 'BASE TABLE'"
         )
         for _, row in ipairs(result) do
-            driver:execute("TRUNCATE TABLE " .. row.table_name .. " CASCADE")
+            driver:execute("TRUNCATE TABLE " .. Quoting.quoteIdentifier(row.table_name) .. " CASCADE")
         end
     end
     return true

@@ -32,6 +32,12 @@ jobs:
           sed "s/version = \"scm-1\"/version = \"${VERSION}-1\"/" jade-scm-1.rockspec > jade-${VERSION}-1.rockspec
           sed -i "s|url = \".*\"|url = \"git://github.com/AlehandroSV/Jade.git\",\\n    tag = \\\"${GITHUB_REF_NAME}\\\"|" jade-${VERSION}-1.rockspec
 
+      - name: Inject version into _VERSION.lua
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i "s/return \"scm\"/return \"${VERSION}\"/" src/jade/_VERSION.lua
+          echo "Version set to ${VERSION}"
+
       - name: Upload to LuaRocks
         env:
           LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}

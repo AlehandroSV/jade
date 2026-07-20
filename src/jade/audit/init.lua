@@ -132,16 +132,36 @@ end
 
 -- Ensure audit logs table exists
 function Audit._ensureTable(driver)
+    -- Use driver-appropriate SQL types
+    local id_type = "INTEGER PRIMARY KEY"
+    local timestamp_type = "TEXT"
+
+    -- Detect driver from class name
+    local driver_name = tostring(driver)
+    if driver_name:find("PostgreSQL") then
+        id_type = "SERIAL PRIMARY KEY"
+        timestamp_type = "TIMESTAMPTZ DEFAULT NOW()"
+    elseif driver_name:find("MySQL") then
+        id_type = "INTEGER PRIMARY KEY AUTO_INCREMENT"
+        timestamp_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    else
+        -- SQLite and others
+        id_type = "INTEGER PRIMARY KEY"
+        timestamp_type = "TEXT"
+    end
+
     local create_sql = string.format(
         [[CREATE TABLE IF NOT EXISTS %s (
-            id SERIAL PRIMARY KEY,
+            id %s,
             table_name VARCHAR(255) NOT NULL,
             record_id VARCHAR(255),
             action VARCHAR(50) NOT NULL,
             changes TEXT,
-            created_at TIMESTAMPTZ DEFAULT NOW()
+            created_at %s
         )]],
-        Quoting.quoteIdentifier(AUDIT_TABLE)
+        Quoting.quoteIdentifier(AUDIT_TABLE),
+        id_type,
+        timestamp_type
     )
     driver:execute(create_sql)
 end

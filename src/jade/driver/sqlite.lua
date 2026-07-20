@@ -187,6 +187,9 @@ function SQLite:mapType(column_type)
         uuid = "TEXT",
         json = "TEXT",
         blob = "BLOB",
+        cuid = "TEXT",
+        nanoid = "TEXT",
+        enum = "TEXT",
     }
     return map[column_type.type] or "TEXT"
 end
