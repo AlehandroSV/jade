@@ -82,7 +82,7 @@ function Entity:scope(name, ...)
         local scope_fn = self._scopes[name]
         if scope_fn then
             local q = Query.new(self)
-            return scope_fn(q, unpack(args))
+            return scope_fn(q, table.unpack(args))
         end
         return Query.new(self)
     end
