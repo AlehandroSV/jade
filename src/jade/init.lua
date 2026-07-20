@@ -36,6 +36,9 @@ Jade.SoftDelete = require("jade.entity.soft_delete")
 -- Security
 Jade.security = require("jade.security")
 
+-- Audit
+Jade.Audit = require("jade.audit")
+
 -- Schema (DDL operations)
 Jade.Schema = require("jade.schema")
 
