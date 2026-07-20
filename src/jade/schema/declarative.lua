@@ -759,4 +759,133 @@ function Declarative.fieldToDeclarative(field_name, field)
     return string.format('%s = { %s }', field_name, table.concat(parts, ', '))
 end
 
+-- Prisma-like schema parser
+-- Parses a simplified schema definition string into a parsed schema table
+--
+-- Syntax:
+--   model User {
+--     id    = Integer().primaryKey()
+--     name  = String(120)
+--     email = String(255)!
+--     bio   = Text()?
+--     role  = String(50)!default("user")
+--     posts = hasMany(Post)
+--   }
+--
+function Declarative.parsePrismaSchema(schema_str)
+    local models = {}
+    local current_model = nil
+
+    for line in schema_str:gmatch("[^\n]+") do
+        local trimmed = line:match("^%s*(.-)%s*$")
+        if trimmed ~= "" and not trimmed:match("^%-%-") then
+            -- Model start: model Name {
+            local model_name = trimmed:match("^model%s+(%w+)%s*{?$")
+            if model_name then
+                current_model = {
+                    name = model_name,
+                    tableName = Declarative.conventions.tableName(model_name),
+                    fields = {},
+                    relations = {},
+                    options = {},
+                }
+                models[model_name] = current_model
+            -- Model end: }
+            elseif trimmed == "}" then
+                current_model = nil
+            elseif current_model then
+                -- Option: table = "custom_name"
+                local option_key, option_val = trimmed:match("^(%w+)%s*=%s*(.+)$")
+                if option_key == "table" then
+                    current_model.tableName = option_val:match('^"(.*)"$') or option_val
+                elseif option_key == "timestamps" then
+                    current_model.options.timestamps = option_val == "true"
+                elseif option_key == "id" then
+                    if option_val == "false" then
+                        current_model.options.noId = true
+                    else
+                        current_model.options.idType = option_val
+                    end
+                else
+                    -- Field definition
+                    local field_name, field_def = trimmed:match("^(%w+)%s*=%s*(.+)$")
+                    if field_name and field_def then
+                        local field = Declarative._parsePrismaField(field_name, field_def)
+                        if field.relation then
+                            current_model.relations[field_name] = field.relation
+                        else
+                            current_model.fields[field_name] = field
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Add convention fields
+    for _, model in pairs(models) do
+        if not model.options.noId then
+            model.fields.id = Declarative.conventions.primaryKey()
+        end
+        if model.options.timestamps ~= false then
+            for k, v in pairs(Declarative.conventions.timestamps()) do
+                model.fields[k] = v
+            end
+        end
+    end
+
+    return models
+end
+
+-- Parse a single Prisma field definition
+function Declarative._parsePrismaField(name, def)
+    local result = { name = name }
+
+    -- Check for modifiers
+    local required = def:match("!") ~= nil
+    local optional = def:match("%?") ~= nil
+    local default_match = def:match("!default%((.+)%)$")
+
+    -- Remove modifiers for type parsing
+    local type_str = def:gsub("!", ""):gsub("%?", ""):gsub("!default%(.+%)$", ""):match("^%s*(.-)%s*$")
+
+    -- Check for default value
+    local default_val = nil
+    if default_match then
+        default_val = default_match:match('^"(.*)"$') or default_match
+    end
+
+    -- Check for relation: hasMany(Model), belongsTo(Model)
+    local rel_type, rel_model = type_str:match("^(hasMany|hasOne|belongsTo)%((%w+)%)")
+    if rel_type then
+        result.relation = {
+            type = rel_type,
+            target = rel_model,
+            foreign_key = Declarative.conventions.foreignKey(rel_model),
+        }
+        return result
+    end
+
+    -- Parse type: String(120), Integer, Text, etc.
+    local col = Declarative.parseType(type_str)
+    if col then
+        if not col.length and not col.precision then
+            -- Try to get length from type string
+            local t, l = type_str:match("^(%w+)%((%d+)%)$")
+            if t and l then col.length = tonumber(l) end
+        end
+        result.type = col.type
+        if col.length then result.length = col.length end
+        if col.precision then result.precision = col.precision end
+        if col.scale then result.scale = col.scale end
+    end
+
+    -- Apply constraints
+    if required then result.notNull = true end
+    if optional then result.nullable = true end
+    if default_val then result.default = default_val end
+
+    return result
+end
+
 return Declarative
