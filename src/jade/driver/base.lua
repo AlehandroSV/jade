@@ -73,6 +73,27 @@ function Driver:executeWithConnection(conn, sql, bindings)
     error("Driver:executeWithConnection() not implemented")
 end
 
+-- generateBulkInsert(table_name, rows, entity) -> sql, bindings
+-- generateBulkUpdate(table_name, data, where) -> sql, bindings
+-- generateBulkDelete(table_name, where) -> sql, bindings
+-- generateUpsert(table_name, data, conflict_columns, entity) -> sql, bindings
+
+function Driver:generateBulkInsert(table_name, rows, entity)
+    error("Driver:generateBulkInsert() not implemented")
+end
+
+function Driver:generateBulkUpdate(table_name, data, where)
+    error("Driver:generateBulkUpdate() not implemented")
+end
+
+function Driver:generateBulkDelete(table_name, where)
+    error("Driver:generateBulkDelete() not implemented")
+end
+
+function Driver:generateUpsert(table_name, data, conflict_columns, entity)
+    error("Driver:generateUpsert() not implemented")
+end
+
 -- Returns true if the database supports CASCADE in DROP TABLE statements.
 -- Override in drivers that do not support CASCADE (e.g., SQLite).
 function Driver:dropTableCascade()

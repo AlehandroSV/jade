@@ -591,4 +591,33 @@ function Query:toSQL()
     return driver:generateSelect(self)
 end
 
+function Query:_compileWhere()
+    local Condition = require("jade.query.condition")
+    if #self._where == 0 then
+        return Condition.new("1", "=", 1, "")
+    end
+    if #self._where == 1 then
+        return self._where[1]
+    end
+    local result = self._where[1]
+    for i = 2, #self._where do
+        result = result:band(self._where[i])
+    end
+    return result
+end
+
+function Query:updateAll(data)
+    local driver = self._entity._driver
+    local where = self:_compileWhere()
+    local sql, bindings = driver:generateBulkUpdate(self._table, data, where)
+    return driver:execute(sql, bindings)
+end
+
+function Query:deleteAll()
+    local driver = self._entity._driver
+    local where = self:_compileWhere()
+    local sql, bindings = driver:generateBulkDelete(self._table, where)
+    return driver:execute(sql, bindings)
+end
+
 return Query

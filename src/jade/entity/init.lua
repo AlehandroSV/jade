@@ -217,6 +217,28 @@ function Entity:inBatches(batchSize, fn)
     return Query.new(self):inBatches(batchSize, fn)
 end
 
+function Entity:updateAll(data)
+    return Query.new(self):updateAll(data)
+end
+
+function Entity:deleteAll()
+    return Query.new(self):deleteAll()
+end
+
+function Entity:insertAll(rows)
+    if #rows == 0 then
+        error("Cannot insert zero rows")
+    end
+    local sql, bindings = self._driver:generateBulkInsert(self._table, rows, self)
+    return self._driver:execute(sql, bindings)
+end
+
+function Entity:upsert(data, conflict_columns)
+    local sql, bindings = self._driver:generateUpsert(self._table, data, conflict_columns, self)
+    return self._driver:execute(sql, bindings)
+end
+end
+
 -- CRUD with validation and callbacks
 function Entity:create(data)
     -- Run validations

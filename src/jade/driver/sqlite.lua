@@ -1,5 +1,6 @@
 local Driver = require("jade.driver.base")
 local Pool = require("jade.driver.pool")
+local Quoting = require("jade.util.quoting")
 
 local SQLite = {}
 SQLite.__index = SQLite
@@ -213,7 +214,17 @@ function SQLite:generateSelect(query)
     end
 
     if #query._select > 0 then
-        sql[#sql + 1] = select_prefix .. " " .. table.concat(query._select, ", ")
+        local resolved = {}
+        for _, item in ipairs(query._select) do
+            local part, part_bindings = Quoting.resolveSelectItem(item, function(name)
+                return self:quoteIdentifier(name)
+            end)
+            resolved[#resolved + 1] = part
+            for _, b in ipairs(part_bindings) do
+                bindings[#bindings + 1] = b
+            end
+        end
+        sql[#sql + 1] = select_prefix .. " " .. table.concat(resolved, ", ")
     else
         sql[#sql + 1] = select_prefix .. " *"
     end
@@ -311,6 +322,129 @@ function SQLite:generateInsert(table_name, data, entity)
         table.concat(columns, ", "),
         table.concat(placeholders, ", ")
     )
+
+    return sql, bindings
+end
+
+function SQLite:generateBulkInsert(table_name, rows, entity)
+    if #rows == 0 then
+        error("Cannot bulk insert zero rows")
+    end
+
+    local columns = {}
+    local all_bindings = {}
+    local value_sets = {}
+
+    for key, _ in pairs(rows[1]) do
+        columns[#columns + 1] = self:quoteIdentifier(key)
+    end
+
+    for _, row in ipairs(rows) do
+        local placeholders = {}
+        for _, col in ipairs(columns) do
+            local key = col:gsub("`", "")
+            placeholders[#placeholders + 1] = "?"
+            all_bindings[#all_bindings + 1] = row[key]
+        end
+        value_sets[#value_sets + 1] = "(" .. table.concat(placeholders, ", ") .. ")"
+    end
+
+    local sql = string.format(
+        "INSERT INTO %s (%s) VALUES %s",
+        self:quoteIdentifier(table_name),
+        table.concat(columns, ", "),
+        table.concat(value_sets, ", ")
+    )
+
+    return sql, all_bindings
+end
+
+function SQLite:generateBulkUpdate(table_name, data, where)
+    local set_parts = {}
+    local bindings = {}
+
+    for key, value in pairs(data) do
+        set_parts[#set_parts + 1] = self:quoteIdentifier(key) .. " = ?"
+        bindings[#bindings + 1] = value
+    end
+
+    local where_sql, where_bindings = where:compile()
+    for _, b in ipairs(where_bindings) do
+        bindings[#bindings + 1] = b
+    end
+
+    local sql = string.format(
+        "UPDATE %s SET %s WHERE %s",
+        self:quoteIdentifier(table_name),
+        table.concat(set_parts, ", "),
+        where_sql
+    )
+
+    return sql, bindings
+end
+
+function SQLite:generateBulkDelete(table_name, where)
+    local where_sql, bindings = where:compile()
+
+    local sql = string.format(
+        "DELETE FROM %s WHERE %s",
+        self:quoteIdentifier(table_name),
+        where_sql
+    )
+
+    return sql, bindings
+end
+
+function SQLite:generateUpsert(table_name, data, conflict_columns, entity)
+    local columns = {}
+    local placeholders = {}
+    local bindings = {}
+
+    for key, value in pairs(data) do
+        columns[#columns + 1] = self:quoteIdentifier(key)
+        placeholders[#placeholders + 1] = "?"
+        bindings[#bindings + 1] = value
+    end
+
+    local conflict_cols = {}
+    for _, col in ipairs(conflict_columns) do
+        conflict_cols[#conflict_cols + 1] = self:quoteIdentifier(col)
+    end
+
+    local update_parts = {}
+    for _, col in ipairs(columns) do
+        local raw_col = col:gsub("`", "")
+        local is_conflict = false
+        for _, cc in ipairs(conflict_columns) do
+            if raw_col == cc then
+                is_conflict = true
+                break
+            end
+        end
+        if not is_conflict then
+            update_parts[#update_parts + 1] = col .. " = EXCLUDED." .. col
+        end
+    end
+
+    local sql
+    if #update_parts > 0 then
+        sql = string.format(
+            "INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s",
+            self:quoteIdentifier(table_name),
+            table.concat(columns, ", "),
+            table.concat(placeholders, ", "),
+            table.concat(conflict_cols, ", "),
+            table.concat(update_parts, ", ")
+        )
+    else
+        sql = string.format(
+            "INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO NOTHING",
+            self:quoteIdentifier(table_name),
+            table.concat(columns, ", "),
+            table.concat(placeholders, ", "),
+            table.concat(conflict_cols, ", ")
+        )
+    end
 
     return sql, bindings
 end
