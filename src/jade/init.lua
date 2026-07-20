@@ -48,6 +48,12 @@ Jade.Declarative = require("jade.schema.declarative")
 -- Driver registry
 Jade.drivers = require("jade.driver")
 
+-- Cache
+Jade.cache = require("jade.cache")
+
+-- Database (multi-database support)
+Jade.database = require("jade.database")
+
 -- Config
 Jade.config = require("jade.config")
 
