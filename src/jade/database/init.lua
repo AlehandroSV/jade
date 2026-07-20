@@ -82,4 +82,45 @@ function M.configure(databases)
     end
 end
 
+-- Read replica support
+local replicas = {}
+local replica_index = {}
+
+-- Register read replicas for a primary connection
+-- M.addReplicas("primary", { replica1_config, replica2_config })
+function M.addReplicas(primary_name, replica_configs)
+    if not replicas[primary_name] then
+        replicas[primary_name] = {}
+    end
+    for _, config in ipairs(replica_configs) do
+        replicas[primary_name][#replicas[primary_name] + 1] = config
+    end
+    replica_index[primary_name] = 0
+end
+
+-- Get a read replica using round-robin selection
+function M.getReplica(primary_name)
+    local rep_list = replicas[primary_name]
+    if not rep_list or #rep_list == 0 then
+        -- Fall back to primary
+        return M.connect(primary_name)
+    end
+
+    replica_index[primary_name] = (replica_index[primary_name] or 0) + 1
+    local idx = ((replica_index[primary_name] - 1) % #rep_list) + 1
+    local config = rep_list[idx]
+
+    local drivers = require("jade.driver")
+    local driver_name = config.driver or "postgresql"
+    local DriverClass = drivers.get(driver_name)
+    local driver = DriverClass.new()
+    driver:connect(config)
+    return driver
+end
+
+-- Get all replicas for a primary
+function M.getReplicas(primary_name)
+    return replicas[primary_name] or {}
+end
+
 return M
