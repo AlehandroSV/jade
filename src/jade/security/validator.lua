@@ -156,6 +156,7 @@ function M.validateSelectItem(item)
         end
         -- Allow common SQL functions
         local allowed_patterns = {
+            "^%s*%*$",     -- wildcard select: *
             "^%s*COUNT%s*%(",
             "^%s*SUM%s*%(",
             "^%s*AVG%s*%(",
