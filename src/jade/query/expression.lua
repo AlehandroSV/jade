@@ -99,6 +99,26 @@ end
 
 function Expression.raw(sql, ...)
     local bindings = { ... }
+
+    -- Validate the raw SQL for obviously dangerous patterns
+    if type(sql) ~= "string" then
+        error("Expression.raw() requires a string SQL fragment")
+    end
+    local upper = sql:upper()
+    -- Block multi-statement (semicolons)
+    -- Allow semicolons inside string literals but not as statement separators
+    if sql:match(";%s*[A-Z]") and not sql:match("';'.*;'") then
+        -- Only block if semicolon is not inside a quoted string
+        local stripped = sql:gsub("'[^']*'", ""):gsub('"[^"]*"', "")
+        if stripped:match(";") then
+            error("Expression.raw() does not allow multiple statements (contains ';')")
+        end
+    end
+    -- Block UNION injection
+    if upper:match("UNION%s+ALL%s+SELECT") or upper:match("UNION%s+SELECT") then
+        error("Expression.raw() does not allow UNION SELECT")
+    end
+
     local raw = {
         _raw = sql,
         _bindings = bindings,

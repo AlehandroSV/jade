@@ -26,7 +26,40 @@ end
 function Quoting.resolveSelectItem(item, quoteFn)
     quoteFn = quoteFn or Quoting.quoteIdentifier
     if type(item) == "string" then
-        return item, {}
+        -- Validate the string item to prevent SQL injection
+        -- Allow: simple column names, table.column, and known SQL functions
+        local upper = item:upper()
+        -- Block dangerous patterns
+        if item:match(";") then
+            error("Invalid SELECT item: contains semicolon")
+        end
+        if item:match("%-%-") then
+            error("Invalid SELECT item: contains comment")
+        end
+        if item:match("/%*") then
+            error("Invalid SELECT item: contains block comment")
+        end
+        -- Allow simple column names (possibly with table prefix)
+        if item:match("^[%a_][%w_]*%.?[%w_]*$") then
+            return item, {}
+        end
+        -- Allow common SQL aggregate/scalar functions
+        local allowed_functions = {
+            "COUNT", "SUM", "AVG", "MIN", "MAX", "COALESCE", "NULLIF",
+            "UPPER", "LOWER", "TRIM", "LENGTH", "SUBSTRING", "CAST",
+            "EXTRACT", "NOW", "CURRENT_TIMESTAMP",
+        }
+        for _, fn in ipairs(allowed_functions) do
+            if upper:match("^%s*" .. fn .. "%s*%(") then
+                return item, {}
+            end
+        end
+        -- Allow DISTINCT keyword
+        if upper:match("^%s*DISTINCT%s+") then
+            return item, {}
+        end
+        -- Reject anything else
+        error("Invalid SELECT item: " .. item)
     elseif type(item) == "table" then
         -- Expression with alias: table.column AS alias
         if item._column and item._alias then
