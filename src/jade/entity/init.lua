@@ -56,9 +56,6 @@ function Entity.new(table_name, columns, options)
     Validations.setup(model)
     Callbacks.setup(model)
 
-    -- Auto-generate convenience methods for each column
-    Entity._generateColumnMethods(model)
-
     -- Auto-connect to assigned database if available
     if model._database then
         local Database = require("jade.database")
@@ -69,46 +66,6 @@ function Entity.new(table_name, columns, options)
     end
 
     return model
-end
-
--- Auto-generate convenience methods based on columns
-function Entity._generateColumnMethods(model)
-    for col_name, col in pairs(model._columns) do
-        -- Skip id column (already has find(id))
-        if col_name ~= "id" then
-            -- findBy{Column}(value) - find first by this column
-            local findName = "findBy" .. col_name:sub(1, 1):upper() .. col_name:sub(2)
-            model[findName] = function(self, value)
-                local Condition = require("jade.query.condition")
-                local cond = Condition.new(col_name, "=", value, self._table)
-                return Query.new(self):where(cond):first()
-            end
-
-            -- findAllBy{Column}(value) - find all by this column
-            local findAllName = "findAllBy" .. col_name:sub(1, 1):upper() .. col_name:sub(2)
-            model[findAllName] = function(self, value)
-                local Condition = require("jade.query.condition")
-                local cond = Condition.new(col_name, "=", value, self._table)
-                return Query.new(self):where(cond):get()
-            end
-
-            -- countBy{Column}(value) - count by this column
-            local countName = "countBy" .. col_name:sub(1, 1):upper() .. col_name:sub(2)
-            model[countName] = function(self, value)
-                local Condition = require("jade.query.condition")
-                local cond = Condition.new(col_name, "=", value, self._table)
-                return Query.new(self):where(cond):count()
-            end
-
-            -- existsBy{Column}(value) - check if exists by this column
-            local existsName = "existsBy" .. col_name:sub(1, 1):upper() .. col_name:sub(2)
-            model[existsName] = function(self, value)
-                local Condition = require("jade.query.condition")
-                local cond = Condition.new(col_name, "=", value, self._table)
-                return Query.new(self):where(cond):exists()
-            end
-        end
-    end
 end
 
 function Entity:configure(driver)
@@ -228,12 +185,91 @@ function Entity:first()
     return Query.new(self):first()
 end
 
-function Entity:find(id)
-    return Query.new(self):find(id)
+-- find(id) - find by primary key (backward compatible)
+-- find({ where = {...}, orderBy = {...} }) - find multiple with options
+function Entity:find(id_or_options)
+    if type(id_or_options) == "table" then
+        -- Flexible find with options
+        local options = id_or_options
+        local q = Query.new(self)
+        if options.where then
+            local Condition = require("jade.query.condition")
+            for k, v in pairs(options.where) do
+                q = q:where(Condition.new(k, "=", v, self._table))
+            end
+        end
+        if options.orderBy then
+            for col, dir in pairs(options.orderBy) do
+                q = q:orderBy(col, dir)
+            end
+        end
+        if options.limit then
+            q = q:limit(options.limit)
+        end
+        if options.offset then
+            q = q:offset(options.offset)
+        end
+        return q:get()
+    else
+        -- Find by ID (original behavior)
+        return Query.new(self):find(id_or_options)
+    end
 end
 
-function Entity:count()
-    return Query.new(self):count()
+-- Flexible query methods
+
+-- findFirst({ where = { col = val } }) - find first matching record
+function Entity:findFirst(options)
+    local q = Query.new(self)
+    if options and options.where then
+        local Condition = require("jade.query.condition")
+        for k, v in pairs(options.where) do
+            q = q:where(Condition.new(k, "=", v, self._table))
+        end
+    end
+    if options and options.orderBy then
+        for col, dir in pairs(options.orderBy) do
+            q = q:orderBy(col, dir)
+        end
+    end
+    return q:first()
+end
+
+-- findFirstOrThrow({ where = { col = val } }) - find first or error
+function Entity:findFirstOrThrow(options)
+    local result = self:findFirst(options)
+    if not result then
+        error("No " .. self._table .. " found with given conditions")
+    end
+    return result
+end
+
+-- findUnique({ where = { email = "..." } }) - find by unique field
+function Entity:findUnique(options)
+    if not options or not options.where then
+        error("findUnique requires a where clause")
+    end
+    return self:findFirst(options)
+end
+
+-- findUniqueOrThrow({ where = { email = "..." } }) - find unique or error
+function Entity:findUniqueOrThrow(options)
+    local result = self:findUnique(options)
+    if not result then
+        error("No " .. self._table .. " found with given unique conditions")
+    end
+    return result
+end
+
+function Entity:count(options)
+    local q = Query.new(self)
+    if options and options.where then
+        local Condition = require("jade.query.condition")
+        for k, v in pairs(options.where) do
+            q = q:where(Condition.new(k, "=", v, self._table))
+        end
+    end
+    return q:count()
 end
 
 function Entity:sum(column)
@@ -257,8 +293,8 @@ function Entity:paginate(options)
     return paginate.paginate(Query.new(self), options)
 end
 
-function Entity:exists()
-    return Query.new(self):exists()
+function Entity:exists(options)
+    return self:count(options) > 0
 end
 
 function Entity:empty()
@@ -340,183 +376,108 @@ function Entity:create(data)
     return result
 end
 
--- Get or create: find by conditions, or create if not found
-function Entity:getOrCreate(conditions, defaults)
-    defaults = defaults or {}
-    local Condition = require("jade.query.condition")
-
-    -- Build where condition from table
-    local where = nil
-    for k, v in pairs(conditions) do
-        local cond = Condition.new(k, "=", v, self._table)
-        if where then
-            where = where:band(cond)
-        else
-            where = cond
+-- update(id, data) - update by ID
+-- update({ where = {...}, data = {...} }) - update with conditions
+function Entity:update(id_or_options, data)
+    if type(id_or_options) == "table" then
+        -- Update with conditions
+        local options = id_or_options
+        local q = Query.new(self)
+        if options.where then
+            local Condition = require("jade.query.condition")
+            for k, v in pairs(options.where) do
+                q = q:where(Condition.new(k, "=", v, self._table))
+            end
         end
-    end
-
-    -- Try to find
-    local q = Query.new(self):where(where):first()
-    if q then
-        return q, false  -- found, not created
-    end
-
-    -- Create with merged data
-    local data = {}
-    for k, v in pairs(conditions) do data[k] = v end
-    for k, v in pairs(defaults) do data[k] = v end
-
-    return self:create(data), true  -- created
-end
-
--- First or create: same as getOrCreate but clearer name
-function Entity:firstOrCreate(conditions, defaults)
-    return self:getOrCreate(conditions, defaults)
-end
-
--- Update or create: update if exists, create if not
-function Entity:updateOrCreate(conditions, data)
-    local Condition = require("jade.query.condition")
-
-    -- Build where condition
-    local where = nil
-    for k, v in pairs(conditions) do
-        local cond = Condition.new(k, "=", v, self._table)
-        if where then
-            where = where:band(cond)
-        else
-            where = cond
-        end
-    end
-
-    -- Try to find
-    local existing = Query.new(self):where(where):first()
-    if existing then
-        -- Update
-        local updated = self:update(existing._data.id, data)
-        return updated, false  -- updated, not created
+        return q:updateAll(options.data)
     else
-        -- Create with merged data
-        local create_data = {}
-        for k, v in pairs(conditions) do create_data[k] = v end
-        for k, v in pairs(data) do create_data[k] = v end
-        return self:create(create_data), true  -- created
-    end
-end
+        -- Update by ID (original behavior)
+        local id = id_or_options
 
--- Delete by conditions
-function Entity:deleteWhere(conditions)
-    local Condition = require("jade.query.condition")
+        -- Validate input data for SQL injection and type safety
+        Security.validateInput(data, self._columns)
 
-    local where = nil
-    for k, v in pairs(conditions) do
-        local cond = Condition.new(k, "=", v, self._table)
-        if where then
-            where = where:band(cond)
-        else
-            where = cond
+        -- Copy data to avoid mutating caller's table
+        local update_data = {}
+        for k, v in pairs(data) do update_data[k] = v end
+        update_data.id = id
+
+        -- Run validations
+        local errors = self:validate(update_data)
+        if errors then
+            error("Validation failed: " .. table.concat(errors, ", "))
         end
-    end
 
-    return Query.new(self):where(where):deleteAll()
+        -- Run around callbacks
+        local result = Callbacks.runAround(self, "around_save", nil, update_data, function()
+            Callbacks.run(self, "before_save", nil, update_data)
+            Callbacks.run(self, "before_update", nil, update_data)
+
+            local Condition = require("jade.query.condition")
+            local where = Condition.new("id", "=", id, self._table)
+
+            -- Prepare data with encryption markers
+            local Encryption = require("jade.encryption")
+            local enc_data, encrypt_cols = Encryption.prepareUpdate(update_data, self._table, self._columns, self._driver)
+            self._encrypt_cols = encrypt_cols
+
+            local sql, bindings = self._driver:generateUpdate(self._table, enc_data, where)
+            local result = self._driver:execute(sql, bindings)
+            local row = result[1] or result
+
+            -- Clear encryption markers
+            self._encrypt_cols = nil
+
+            local instance = Instance.new(self, row)
+
+            Callbacks.run(self, "after_update", instance, update_data)
+            Callbacks.run(self, "after_save", instance, update_data)
+
+            -- Fire built-in event
+            Events.fire(self, "updated", { instance = instance, data = update_data })
+
+            return instance
+        end)
+
+        return result
+    end
 end
 
--- Update by conditions
-function Entity:updateWhere(conditions, data)
-    local Condition = require("jade.query.condition")
-
-    local where = nil
-    for k, v in pairs(conditions) do
-        local cond = Condition.new(k, "=", v, self._table)
-        if where then
-            where = where:band(cond)
-        else
-            where = cond
+-- delete(id) - delete by ID
+-- delete({ where = {...} }) - delete with conditions
+function Entity:delete(id_or_options)
+    if type(id_or_options) == "table" then
+        -- Delete with conditions
+        local options = id_or_options
+        local q = Query.new(self)
+        if options.where then
+            local Condition = require("jade.query.condition")
+            for k, v in pairs(options.where) do
+                q = q:where(Condition.new(k, "=", v, self._table))
+            end
         end
-    end
+        return q:deleteAll()
+    else
+        -- Delete by ID (original behavior)
+        local id = id_or_options
 
-    return Query.new(self):where(where):updateAll(data)
-end
-
--- Register entity with a database connection
-function Entity:register(driver)
-    self._driver = driver
-    return self
-end
-
--- Set database name for multi-database support
-function Entity:database(db_name)
-    self._database = db_name
-    return self
-end
-
-function Entity:update(id, data)
-    -- Validate input data for SQL injection and type safety
-    Security.validateInput(data, self._columns)
-
-    -- Copy data to avoid mutating caller's table
-    local update_data = {}
-    for k, v in pairs(data) do update_data[k] = v end
-    update_data.id = id
-
-    -- Run validations
-    local errors = self:validate(update_data)
-    if errors then
-        error("Validation failed: " .. table.concat(errors, ", "))
-    end
-
-    -- Run around callbacks
-    local result = Callbacks.runAround(self, "around_save", nil, update_data, function()
-        Callbacks.run(self, "before_save", nil, update_data)
-        Callbacks.run(self, "before_update", nil, update_data)
+        -- Run callbacks
+        Callbacks.run(self, "before_delete", nil, { id = id })
 
         local Condition = require("jade.query.condition")
         local where = Condition.new("id", "=", id, self._table)
-
-        -- Prepare data with encryption markers
-        local Encryption = require("jade.encryption")
-        local enc_data, encrypt_cols = Encryption.prepareUpdate(update_data, self._table, self._columns, self._driver)
-        self._encrypt_cols = encrypt_cols
-
-        local sql, bindings = self._driver:generateUpdate(self._table, enc_data, where)
+        local sql, bindings = self._driver:generateDelete(self._table, where)
         local result = self._driver:execute(sql, bindings)
         local row = result[1] or result
-
-        -- Clear encryption markers
-        self._encrypt_cols = nil
-
         local instance = Instance.new(self, row)
 
-        Callbacks.run(self, "after_update", instance, update_data)
-        Callbacks.run(self, "after_save", instance, update_data)
+        Callbacks.run(self, "after_delete", instance, { id = id })
 
         -- Fire built-in event
-        Events.fire(self, "updated", { instance = instance, data = update_data })
+        Events.fire(self, "deleted", { instance = instance, data = { id = id } })
 
         return instance
-    end)
-
-    return result
-end
-
-function Entity:delete(id)
-    -- Run callbacks
-    Callbacks.run(self, "before_delete", nil, { id = id })
-
-    local Condition = require("jade.query.condition")
-    local where = Condition.new("id", "=", id, self._table)
-    local sql, bindings = self._driver:generateDelete(self._table, where)
-    local result = self._driver:execute(sql, bindings)
-    local row = result[1] or result
-    local instance = Instance.new(self, row)
-
-    Callbacks.run(self, "after_delete", instance, { id = id })
-
-    -- Fire built-in event
-    Events.fire(self, "deleted", { instance = instance, data = { id = id } })
-
-    return instance
+    end
 end
 
 -- Events
