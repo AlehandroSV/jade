@@ -248,6 +248,27 @@ local posts = user.posts:load()
 
 -- Eager loading (avoid N+1)
 local users = User:include("posts"):get()
+
+-- Nested creates (connect, create, connectOrCreate)
+local post = Post:create({
+    title = "My Post",
+    user = { connect = { id = 1 } },         -- reference existing
+    -- user = { create = { name = "Alice" } }, -- create new
+    -- user = { connectOrCreate = { where = { email = "a@x.com" }, create = { name = "Alice" } } },
+})
+
+-- Create parent with children
+local user = User:create({
+    name = "Alice",
+    posts = {
+        { create = { title = "Post 1" } },
+        { create = { title = "Post 2" } },
+    },
+})
+
+-- Proxy methods
+user.posts:create({ title = "Post 3" })
+user.posts:connect(5)
 ```
 
 ### Named Scopes
