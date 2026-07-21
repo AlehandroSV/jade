@@ -35,7 +35,7 @@ Jade is a modern ORM/Data Mapper for Lua that offers a modern development experi
 - **Database Views** - createView, View queries, dropView
 - **Query Convenience** - exists(), empty(), pluck(), take(), inBatches()
 - **Query Caching** - In-memory cache with TTL and pattern invalidation
-- **Column Encryption** - XOR+base64 at column, database, or field level
+- **Column Encryption** - Database-native AES (pgcrypto/AES_ENCRYPT) or custom Lua functions
 - **Audit Trail** - Automatic change tracking via callbacks
 - **Soft Delete with Cascade** - Logical deletion that cascades through relations
 - **Multi-Database** - Named databases, read replicas, per-entity assignment
@@ -421,28 +421,107 @@ local logs = jade.Audit.query(jade.driver(), {
 
 ### Column Encryption
 
+Jade supports two encryption modes: **database-native** (recommended for production) and **custom** (for user-provided logic).
+
+#### Database-Native Encryption (AES)
+
+Uses the database's built-in encryption functions. Requires PostgreSQL with pgcrypto extension or MySQL.
+
 ```lua
--- Configure encryption
+-- Configure encryption with a secret key
 jade.Encryption.configure({ key = "my-secret-key" })
+
+-- PostgreSQL: install pgcrypto extension first
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Mark columns as encrypted
 local User = jade.Entity("users", {
     id = jade.Integer():primaryKey(),
     name = jade.String(120),
-    ssn = jade.String(11):encrypted(),  -- Column-level
+    email = jade.String(255):encrypted(),
+    ssn = jade.String(11):encrypted(),
 })
 
--- Or encrypt entire database
-jade.Encryption.configure({ key = "key", database_encrypted = true })
+-- Values are encrypted in the database (not in Lua)
+-- PostgreSQL: pgp_sym_encrypt/column, key
+-- MySQL: AES_ENCRYPT(column, key)
+-- Decryption happens automatically on SELECT
+```
 
--- Or specific fields per entity
+#### Custom Encryption (User-Provided Functions)
+
+Provide your own encrypt/decrypt functions. Works with any database including SQLite.
+
+```lua
+-- Option 1: Inline functions
 jade.Encryption.configure({
-    key = "key",
-    fields = { users = {"ssn", "tax_id"} }
+    key = "my-secret-key",
+    algorithm = "custom",
+    encrypt_fn = function(value, key)
+        -- your encryption logic here
+        return encrypted_value
+    end,
+    decrypt_fn = function(encrypted, key)
+        -- your decryption logic here
+        return original_value
+    end,
 })
 
--- Values are automatically encrypted on create/update
--- and decrypted on read (ENC: prefix detection)
+-- Option 2: Separate files (recommended for complex logic)
+jade.Encryption.configure({
+    key = "my-secret-key",
+    algorithm = "custom",
+    encrypt_file = "encryption/encrypt.lua",
+    decrypt_file = "encryption/decrypt.lua",
+})
+```
+
+The encryption files must return a function:
+
+```lua
+-- encryption/encrypt.lua
+return function(value, key)
+    -- Example: simple Caesar cipher (NOT secure, just for demo)
+    local result = {}
+    for i = 1, #value do
+        local byte = string.byte(value, i)
+        local key_byte = string.byte(key, (i - 1) % #key + 1)
+        result[i] = string.char((byte + key_byte) % 256)
+    end
+    return table.concat(result)
+end
+```
+
+```lua
+-- encryption/decrypt.lua
+return function(encrypted, key)
+    -- Reverse the encryption
+    local result = {}
+    for i = 1, #encrypted do
+        local byte = string.byte(encrypted, i)
+        local key_byte = string.byte(key, (i - 1) % #key + 1)
+        result[i] = string.char((byte - key_byte) % 256)
+    end
+    return table.concat(result)
+end
+```
+
+#### Encryption Configuration Options
+
+```lua
+jade.Encryption.configure({
+    key = "secret",                    -- Encryption key (required)
+    algorithm = "aes" | "custom",      -- "aes" for DB-native, "custom" for Lua functions
+    database_encrypted = true,         -- Encrypt ALL columns in ALL entities
+    fields = {                         -- Encrypt specific fields per entity
+        users = {"ssn", "tax_id"},
+        payments = {"card_number", "cvv"},
+    },
+    encrypt_fn = function,             -- Custom encrypt function (inline)
+    decrypt_fn = function,             -- Custom decrypt function (inline)
+    encrypt_file = "path/to/encrypt.lua",  -- Custom encrypt function (from file)
+    decrypt_file = "path/to/decrypt.lua",  -- Custom decrypt function (from file)
+})
 ```
 
 ### Query Caching
@@ -607,7 +686,7 @@ jade.String():unique()        -- UNIQUE
 jade.String():notNull()       -- NOT NULL
 jade.Boolean():default(true)  -- DEFAULT
 jade.Timestamp():defaultNow() -- DEFAULT CURRENT_TIMESTAMP
-jade.String():encrypted()     -- ENCRYPTED (XOR+base64)
+jade.String():encrypted()     -- ENCRYPTED (requires Encryption.configure())
 ```
 
 ### License
@@ -642,7 +721,7 @@ Jade e um ORM/Data Mapper moderno para Lua que oferece uma experiencia moderna d
 - **Views de Banco** - createView, consultas View, dropView
 - **Conveniencia de Query** - exists(), empty(), pluck(), take(), inBatches()
 - **Cache de Query** - Cache em memoria com TTL e invalidacao por padrao
-- **Criptografia de Coluna** - XOR+base64 em nivel de coluna, banco ou campo
+- **Criptografia de Coluna** - AES nativo do banco (pgcrypto/AES_ENCRYPT) ou funcoes customizadas
 - **Trail de Auditoria** - Rastreamento automatico de mudancas via callbacks
 - **Soft Delete com Cascata** - Exclusao logica que cascata pelas relacoes
 - **Multi-Banco** - Bancos nomeados, read replicas, assignacao por entidade
