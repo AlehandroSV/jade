@@ -1,8 +1,8 @@
 package = "jade"
 version = "scm-1"
 source = {
-    url = "git://github.com/AlehandroSV/jade.git",
-    dir = "jade"
+    url = "git://github.com/AlehandroSV/Jade.git",
+    dir = "Jade"
 }
 description = {
     summary = "Um ORM moderno para Lua",
