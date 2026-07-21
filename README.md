@@ -689,6 +689,50 @@ jade.Timestamp():defaultNow() -- DEFAULT CURRENT_TIMESTAMP
 jade.String():encrypted()     -- ENCRYPTED (requires Encryption.configure())
 ```
 
+### Linter (VS Code)
+
+Jade has an official VS Code extension that provides real-time schema validation, auto-completion, and automatic relation detection.
+
+**Install:**
+
+1. Open VS Code
+2. `Ctrl+Shift+X` → search "Jade Linter"
+3. Click **Install**
+
+**Features:**
+
+- Real-time linting for types, modifiers, and cross-file references
+- Auto-completion for `jade.` types, `:modifier()` patterns, table and model names
+- Hover documentation for types, modifiers, and relations
+- Auto-format on save (optional)
+
+**Auto-Relation Detection:**
+
+The linter automatically infers `belongsTo` relations from two patterns:
+
+```lua
+-- Pattern 1: explicit :foreignKey() modifier
+Post = jade.Entity("posts", {
+    user_id = jade.Integer():foreignKey("users", "id"),
+})
+
+-- Pattern 2: _id naming convention (when target table exists in schema)
+Post = jade.Entity("posts", {
+    user_id = jade.Integer():notNull(),
+    -- Infers: belongsTo → User (because "users" table exists)
+})
+```
+
+**Diagnostics:**
+
+| Level | Example |
+|-------|---------|
+| Error | Invalid type, unknown modifier, missing model reference |
+| Warning | `String` without length, `created_at` without `defaultNow()` |
+| Info | Auto primary key, inferred `belongsTo` relation |
+
+For full documentation, see the [jade-linter README](https://github.com/AlehandroSV/jade-linter).
+
 ### License
 
 MIT
@@ -988,8 +1032,52 @@ jade.String():unique()        -- UNIQUE
 jade.String():notNull()       -- NOT NULL
 jade.Boolean():default(true)  -- DEFAULT
 jade.Timestamp():defaultNow() -- DEFAULT CURRENT_TIMESTAMP
-jade.String():encrypted()     -- ENCRIPTOGRAFADO (XOR+base64)
+jade.String():encrypted()     -- ENCRIPTOGRAFADO (requer Encryption.configure())
 ```
+
+### Linter (VS Code)
+
+O Jade tem uma extensao oficial do VS Code que fornece validacao de schema em tempo real, auto-completion e deteccao automatica de relacionamentos.
+
+**Instalar:**
+
+1. Abra o VS Code
+2. `Ctrl+Shift+X` → pesquise "Jade Linter"
+3. Clique em **Instalar**
+
+**Funcionalidades:**
+
+- Linting em tempo real para tipos, modificadores e referencias cross-file
+- Auto-completion para tipos `jade.`, padroes `:modifier()`, nomes de tabelas e modelos
+- Hover com documentacao para tipos, modificadores e relacionamentos
+- Formatacao automatica ao salvar (opcional)
+
+**Deteccao Automatica de Relacionamentos:**
+
+O linter infera automaticamente relacoes `belongsTo` a partir de dois padroes:
+
+```lua
+-- Padrao 1: modificador :foreignKey() explicito
+Post = jade.Entity("posts", {
+    user_id = jade.Integer():foreignKey("users", "id"),
+})
+
+-- Padrao 2: convencao de nome _id (quando tabela alvo existe no schema)
+Post = jade.Entity("posts", {
+    user_id = jade.Integer():notNull(),
+    -- Infere: belongsTo → User (pois tabela "users" existe)
+})
+```
+
+**Diagnosticos:**
+
+| Nivel | Exemplo |
+|-------|---------|
+| Erro | Tipo invalido, modificador desconhecido, referencia a model inexistente |
+| Aviso | `String` sem tamanho, `created_at` sem `defaultNow()` |
+| Info | Primary key automatica, relacao `belongsTo` inferida |
+
+Para documentacao completa, veja o [README do jade-linter](https://github.com/AlehandroSV/jade-linter).
 
 ### Licenca
 
