@@ -20,8 +20,37 @@ function M.configure(opts)
     if opts.algorithm then enc_config.algorithm = opts.algorithm end
     if opts.database_encrypted ~= nil then enc_config.database_encrypted = opts.database_encrypted end
     if opts.fields then enc_config.fields = opts.fields end
-    if opts.encrypt_fn then enc_config.encrypt_fn = opts.encrypt_fn end
-    if opts.decrypt_fn then enc_config.decrypt_fn = opts.decrypt_fn end
+
+    -- Load encrypt/decrypt functions from files if provided
+    if opts.encrypt_file then
+        local fn = M.loadEncryptionFile(opts.encrypt_file)
+        enc_config.encrypt_fn = fn
+    elseif opts.encrypt_fn then
+        enc_config.encrypt_fn = opts.encrypt_fn
+    end
+
+    if opts.decrypt_file then
+        local fn = M.loadEncryptionFile(opts.decrypt_file)
+        enc_config.decrypt_fn = fn
+    elseif opts.decrypt_fn then
+        enc_config.decrypt_fn = opts.decrypt_fn
+    end
+end
+
+--- Load an encryption function from a Lua file
+--- The file must return a function: function(value, key) -> transformed_value
+--- @param file_path string Path to the Lua file
+--- @return function The loaded function
+function M.loadEncryptionFile(file_path)
+    local loader, err = loadfile(file_path)
+    if not loader then
+        error("Failed to load encryption file '" .. file_path .. "': " .. tostring(err))
+    end
+    local fn = loader()
+    if type(fn) ~= "function" then
+        error("Encryption file '" .. file_path .. "' must return a function, got " .. type(fn))
+    end
+    return fn
 end
 
 -- Get config
@@ -274,6 +303,8 @@ function M.clear()
         fields = {},
         encrypt_fn = nil,
         decrypt_fn = nil,
+        encrypt_file = nil,
+        decrypt_file = nil,
     }
     encrypted_columns = {}
 end
