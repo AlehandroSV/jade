@@ -31,6 +31,7 @@ end
 registerLazy("postgresql", "jade.driver.postgresql")
 registerLazy("mysql", "jade.driver.mysql")
 registerLazy("sqlite", "jade.driver.sqlite")
+registerLazy("mariadb", "jade.driver.mariadb")
 
 return {
     register = register,
