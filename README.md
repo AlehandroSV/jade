@@ -19,7 +19,7 @@ Jade is a modern ORM/Data Mapper for Lua that offers a modern development experi
 
 ### Features
 
-- **Multi-Driver** - PostgreSQL, MySQL, MariaDB, SQLite
+- **Multi-Driver** - PostgreSQL, MySQL, SQLite
 - **Declarative Schema** - Convention-over-configuration with automatic table names, timestamps, foreign keys
 - **Query Builder** - Chainable queries with JOINs, GROUP BY, HAVING, DISTINCT, subqueries
 - **Relations** - belongsTo, hasMany, hasOne, hasAndBelongsToMany, hasManyThrough
@@ -64,7 +64,7 @@ local jade = require("jade")
 -- Configure connection
 jade.configure({
     database = {
-        driver = "postgresql",   -- or "mysql", "mariadb", "sqlite"
+        driver = "postgresql",   -- or "mysql", "sqlite"
         host = "localhost",
         port = 5432,
         database = "myapp",
@@ -101,13 +101,12 @@ user:delete()
 
 ### Database Drivers
 
-Jade supports four database drivers out of the box:
+Jade supports three database drivers out of the box:
 
 | Driver | Package | Key Features |
 |--------|---------|-------------|
 | PostgreSQL | luapgsql | RETURNING, CASCADE, TIMESTAMPTZ, JSONB |
 | MySQL | luasql-mysql | AUTO_INCREMENT, backtick quoting, ENGINE=InnoDB |
-| MariaDB | luasql-mysql | RETURNING (10.5+), JSON, UUID, INET4/6, auto version detection |
 | SQLite | luasql-sqlite3 | AUTOINCREMENT, WAL mode, foreign_keys pragma |
 
 ```lua
@@ -116,9 +115,6 @@ jade.configure({ database = { driver = "postgresql", ... } })
 
 -- MySQL
 jade.configure({ database = { driver = "mysql", ... } })
-
--- MariaDB
-jade.configure({ database = { driver = "mariadb", ... } })
 
 -- SQLite
 jade.configure({ database = { driver = "sqlite", database = "app.db" } })
@@ -774,7 +770,7 @@ Jade e um ORM/Data Mapper moderno para Lua que oferece uma experiencia moderna d
 
 ### Features
 
-- **Multi-Driver** - PostgreSQL, MySQL, MariaDB, SQLite
+- **Multi-Driver** - PostgreSQL, MySQL, SQLite
 - **Schema Declarativo** - Convention-over-configuration com nomes de tabela automaticos, timestamps, foreign keys
 - **Query Builder** - Consultas chainable com JOINs, GROUP BY, HAVING, DISTINCT, subqueries
 - **Relacoes** - belongsTo, hasMany, hasOne, hasAndBelongsToMany, hasManyThrough
@@ -819,7 +815,7 @@ local jade = require("jade")
 -- Configurar conexao
 jade.configure({
     database = {
-        driver = "postgresql",   -- ou "mysql", "mariadb", "sqlite"
+        driver = "postgresql",   -- ou "mysql", "sqlite"
         host = "localhost",
         port = 5432,
         database = "myapp",
@@ -860,7 +856,6 @@ user:delete()
 |--------|--------|----------------|
 | PostgreSQL | luapgsql | RETURNING, CASCADE, TIMESTAMPTZ, JSONB |
 | MySQL | luasql-mysql | AUTO_INCREMENT, quoting com backtick, ENGINE=InnoDB |
-| MariaDB | luasql-mysql | RETURNING (10.5+), JSON, UUID, INET4/6, deteccao automatica de versao |
 | SQLite | luasql-sqlite3 | AUTOINCREMENT, modo WAL, pragma foreign_keys |
 
 ### Schema Declarativo
