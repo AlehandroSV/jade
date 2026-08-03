@@ -8,6 +8,9 @@ package.path = dir .. "../src/?.lua;" .. package.path
 package.path = dir .. "../src/?/init.lua;" .. package.path
 package.path = dir .. "?.lua;" .. package.path
 
+-- Load compatibility layer for Lua 5.1
+require("jade.util.compat")
+
 -- Test framework
 local M = {
     tests = {},
@@ -156,6 +159,7 @@ local test_files = {
     "driver/mysql_spec.lua",
     "driver/sqlite_spec.lua",
     "driver/pool_spec.lua",
+    "driver/mariadb_spec.lua",
     "migration/tracker_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
