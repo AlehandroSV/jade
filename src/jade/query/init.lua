@@ -630,8 +630,6 @@ function Query:deleteAll()
 end
 
 function Query:_compileWhere()
-    local Condition = require("jade.query.condition")
-
     if #self._where == 0 then
         -- Return a condition that matches all rows (always true)
         return Condition.new("1", "=", 1, "")
