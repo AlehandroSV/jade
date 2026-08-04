@@ -148,8 +148,8 @@ function M.generateMigration(schema, name)
 
     -- Generate CREATE TABLE statements
     local table_names = {}
-    for name in pairs(schema.tables) do
-        table_names[#table_names + 1] = name
+    for tbl_name in pairs(schema.tables) do
+        table_names[#table_names + 1] = tbl_name
     end
     table.sort(table_names)
 
