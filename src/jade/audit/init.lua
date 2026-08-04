@@ -18,8 +18,6 @@ function Audit.setup(entity, options)
         ignored_fields = ignored_fields,
     }
 
-    local old_values = {}
-
     entity:beforeCreate(function(data)
         data._audit_action = "create"
     end)

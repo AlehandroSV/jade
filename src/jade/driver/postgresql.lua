@@ -179,7 +179,6 @@ function PostgreSQL:generateSelect(query)
     local bindings = {}
 
     local Encryption = require("jade.encryption")
-    local entity_name = query._entity._table
     local columns = query._entity._columns
 
     -- SELECT clause with DISTINCT

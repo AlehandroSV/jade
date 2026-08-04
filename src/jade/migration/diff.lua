@@ -37,7 +37,7 @@ function M.compare(current_schema, desired_schema)
     end
 
     -- Find tables to drop
-    for name, tbl in pairs(current_tables) do
+    for name in pairs(current_tables) do
         if not desired_tables[name] then
             diff.drop_tables[#diff.drop_tables + 1] = name
         end
