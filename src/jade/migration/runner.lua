@@ -1,6 +1,6 @@
 local M = {}
 
-function M.run(driver, migration_module, action)
+function M.run(_driver, migration_module, action)
     action = action or "up"
 
     local fn = migration_module[action]
