@@ -98,13 +98,16 @@ function MySQL:quoteIdentifier(name)
 end
 
 -- Set encryption key as session variable to avoid exposing it in SQL strings
-function MySQL:setEncryptionKey()
+-- Properly escapes key to prevent SQL injection
+function MySQL:setEncryptionKey(conn)
+    conn = conn or self._conn
     local Encryption = require("jade.encryption")
     if Encryption.isEnabled() then
         local key = Encryption.getKey()
-        local escaped_key = key:gsub("'", "''")
+        -- Escape backslashes first, then single quotes for MySQL
+        local escaped_key = key:gsub("\\", "\\\\"):gsub("'", "''")
         local sql = "SET @jade_encryption_key = '" .. escaped_key .. "'"
-        local res, err = self._conn:execute(sql)
+        local res, err = conn:execute(sql)
         if not res then
             error("Failed to set encryption key session variable: " .. tostring(err))
         end
@@ -124,16 +127,7 @@ function MySQL:getConnection()
         error("Failed to connect to MySQL: " .. tostring(err))
     end
     -- Set encryption key for new connection
-    local Encryption = require("jade.encryption")
-    if Encryption.isEnabled() then
-        local key = Encryption.getKey()
-        local escaped_key = key:gsub("'", "''")
-        local sql = "SET @jade_encryption_key = '" .. escaped_key .. "'"
-        local res, set_err = conn:execute(sql)
-        if not res then
-            error("Failed to set encryption key session variable: " .. tostring(set_err))
-        end
-    end
+    self:setEncryptionKey(conn)
     return conn
 end
 
@@ -518,12 +512,12 @@ function MySQL:generateUpsert(table_name, data, conflict_columns, entity)
     return sql, bindings
 end
 
-function MySQL:generateUpdate(table_name, data, where)
+function MySQL:generateUpdate(table_name, data, where, entity)
     local set_parts = {}
     local bindings = {}
 
     local Encryption = require("jade.encryption")
-    local encrypt_cols = {}
+    local encrypt_cols = entity and entity._encrypt_cols or {}
 
     for key, value in pairs(data) do
         if encrypt_cols[key] and Encryption.isEnabled() then
