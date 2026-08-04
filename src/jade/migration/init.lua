@@ -49,6 +49,7 @@ function M.migrate(driver)
         end)
 
         if ok then
+            -- Record migration only after successful commit
             tracker.recordMigration(driver, f.name)
             results[#results + 1] = { name = f.name, success = true }
             print("  Applied: " .. f.name)
@@ -83,6 +84,7 @@ function M.rollback(driver, steps)
         end)
 
         if ok then
+            -- Remove migration record only after successful rollback
             tracker.removeMigration(driver, name)
             results[#results + 1] = { name = name, success = true }
             print("  Rolled back: " .. name)

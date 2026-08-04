@@ -1,6 +1,12 @@
 local M = {}
 
-function M.run(_driver, migration_module, action)
+--- Run a single migration within a transaction.
+-- Automatically commits on success, rolls back on error.
+-- @param driver table The database driver
+-- @param migration_module table The migration module with up/down functions
+-- @param action string The action to perform ("up" or "down")
+-- @return boolean true if the migration was committed successfully
+function M.run(driver, migration_module, action)
     action = action or "up"
 
     local fn = migration_module[action]
@@ -8,11 +14,8 @@ function M.run(_driver, migration_module, action)
         error("Migration does not have a '" .. action .. "' function")
     end
 
-    -- Execute the migration function
-    -- The function should call Jade API methods like createTable, etc.
-    fn()
-
-    return true
+    -- Execute the migration within a transaction for atomicity
+    return driver:transaction(fn)
 end
 
 function M.runAll(driver, migrations, action)
