@@ -568,6 +568,13 @@ end
 --- Execute a function within a database transaction.
 -- Automatically commits on success, rolls back on error.
 -- Uses the shared connection to ensure all operations are within the same transaction.
+--
+-- IMPORTANT MySQL LIMITATION: DDL statements (CREATE TABLE, DROP TABLE, ALTER TABLE,
+-- TRUNCATE TABLE, RENAME TABLE) cause implicit commits in MySQL and CANNOT be rolled
+-- back. If a migration contains DDL followed by DML and the DML fails, the DDL will
+-- remain committed. This is a MySQL limitation, not a Jade bug.
+-- PostgreSQL and SQLite support transactional DDL and are fully atomic.
+--
 -- @param fn function The function to execute within the transaction
 -- @return boolean true if the transaction was committed successfully
 function MySQL:transaction(fn)
@@ -590,9 +597,12 @@ function MySQL:transaction(fn)
     else
         local rollback_res, rollback_err = conn:execute("ROLLBACK")
         if not rollback_res then
+            -- Connection may be in undefined state after failed rollback
+            self._conn = nil
             error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
         end
-        error("Transaction failed: " .. tostring(fn_err))
+        -- Re-raise original error preserving context
+        error(fn_err, 2)
     end
 end
 

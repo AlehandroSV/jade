@@ -502,6 +502,7 @@ end
 --- Execute a function within a database transaction.
 -- Automatically commits on success, rolls back on error.
 -- Uses the shared connection to ensure all operations are within the same transaction.
+-- SQLite supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
 -- @param fn function The function to execute within the transaction
 -- @return boolean true if the transaction was committed successfully
 function SQLite:transaction(fn)
@@ -524,9 +525,12 @@ function SQLite:transaction(fn)
     else
         local rollback_res, rollback_err = conn:execute("ROLLBACK")
         if not rollback_res then
+            -- Connection may be in undefined state after failed rollback
+            self._conn = nil
             error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
         end
-        error("Transaction failed: " .. tostring(fn_err))
+        -- Re-raise original error preserving context
+        error(fn_err, 2)
     end
 end
 

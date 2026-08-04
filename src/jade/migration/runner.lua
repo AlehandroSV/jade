@@ -2,6 +2,12 @@ local M = {}
 
 --- Run a single migration within a transaction.
 -- Automatically commits on success, rolls back on error.
+--
+-- Note: MySQL DDL statements (CREATE TABLE, DROP TABLE, ALTER TABLE, etc.)
+-- cause implicit commits and cannot be rolled back. Migrations containing
+-- DDL on MySQL are not fully atomic. PostgreSQL and SQLite support
+-- transactional DDL and are fully atomic.
+--
 -- @param driver table The database driver
 -- @param migration_module table The migration module with up/down functions
 -- @param action string The action to perform ("up" or "down")
