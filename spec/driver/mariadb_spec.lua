@@ -11,6 +11,7 @@ describe("MariaDB Driver SQL Generation", function()
 
     before_each(function()
         driver = MariaDB.new()
+        driver._version_detection_failed = false
         User = Entity.new("users", {
             id = Integer():primaryKey(),
             name = String(120),
@@ -243,6 +244,30 @@ describe("MariaDB Driver SQL Generation", function()
         end)
     end)
 
+    describe("generateBulkInsert", function()
+        it("generates bulk insert without RETURNING when not supported", function()
+            driver._supports_returning = false
+            local rows = {
+                { name = "Lucas", email = "lucas@test.com" },
+                { name = "Ana", email = "ana@test.com" },
+            }
+            local sql, bindings = driver:generateBulkInsert("users", rows, User)
+            assert.is_truth(string.find(sql, "INSERT INTO"))
+            assert.is_falsy(string.find(sql, "RETURNING"))
+        end)
+
+        it("generates bulk insert with RETURNING when supported", function()
+            driver._supports_returning = true
+            local rows = {
+                { name = "Lucas", email = "lucas@test.com" },
+                { name = "Ana", email = "ana@test.com" },
+            }
+            local sql, bindings = driver:generateBulkInsert("users", rows, User)
+            assert.is_truth(string.find(sql, "INSERT INTO"))
+            assert.is_truth(string.find(sql, "RETURNING"))
+        end)
+    end)
+
     describe("supportsAutoIncrement", function()
         it("returns true", function()
             assert.is_true(driver:supportsAutoIncrement())
@@ -251,35 +276,125 @@ describe("MariaDB Driver SQL Generation", function()
 
     describe("version detection", function()
         it("sets _supports_returning to true for version 10.5", function()
-            driver._mariadb_version = "10.5.8-MariaDB"
-            local major, minor = driver._mariadb_version:match("(%d+)%.(%d+)")
-            local supports = (tonumber(major) > 10) or
-                (tonumber(major) == 10 and tonumber(minor) >= 5)
-            assert.is_true(supports)
+            local mock_conn = {
+                execute = function(self, sql)
+                    return {
+                        fetch = function(self, t, mode)
+                            return { version = "10.5.8-MariaDB" }
+                        end
+                    }
+                end
+            }
+            driver._conn = mock_conn
+            driver:_detectVersion()
+            assert.are.equal("10.5.8-MariaDB", driver._mariadb_version)
+            assert.is_true(driver._supports_returning)
         end)
 
         it("sets _supports_returning to true for version 11.0", function()
-            driver._mariadb_version = "11.0.2-MariaDB"
-            local major, minor = driver._mariadb_version:match("(%d+)%.(%d+)")
-            local supports = (tonumber(major) > 10) or
-                (tonumber(major) == 10 and tonumber(minor) >= 5)
-            assert.is_true(supports)
+            local mock_conn = {
+                execute = function(self, sql)
+                    return {
+                        fetch = function(self, t, mode)
+                            return { version = "11.0.2-MariaDB" }
+                        end
+                    }
+                end
+            }
+            driver._conn = mock_conn
+            driver:_detectVersion()
+            assert.are.equal("11.0.2-MariaDB", driver._mariadb_version)
+            assert.is_true(driver._supports_returning)
         end)
 
         it("sets _supports_returning to false for version 10.4", function()
-            driver._mariadb_version = "10.4.12-MariaDB"
-            local major, minor = driver._mariadb_version:match("(%d+)%.(%d+)")
-            local supports = (tonumber(major) > 10) or
-                (tonumber(major) == 10 and tonumber(minor) >= 5)
-            assert.is_false(supports)
+            local mock_conn = {
+                execute = function(self, sql)
+                    return {
+                        fetch = function(self, t, mode)
+                            return { version = "10.4.12-MariaDB" }
+                        end
+                    }
+                end
+            }
+            driver._conn = mock_conn
+            driver:_detectVersion()
+            assert.are.equal("10.4.12-MariaDB", driver._mariadb_version)
+            assert.is_false(driver._supports_returning)
         end)
 
         it("sets _supports_returning to false for version 10.3", function()
-            driver._mariadb_version = "10.3.32-MariaDB"
-            local major, minor = driver._mariadb_version:match("(%d+)%.(%d+)")
-            local supports = (tonumber(major) > 10) or
-                (tonumber(major) == 10 and tonumber(minor) >= 5)
-            assert.is_false(supports)
+            local mock_conn = {
+                execute = function(self, sql)
+                    return {
+                        fetch = function(self, t, mode)
+                            return { version = "10.3.32-MariaDB" }
+                        end
+                    }
+                end
+            }
+            driver._conn = mock_conn
+            driver:_detectVersion()
+            assert.are.equal("10.3.32-MariaDB", driver._mariadb_version)
+            assert.is_false(driver._supports_returning)
+        end)
+
+        it("sets _version_detection_failed when query fails", function()
+            local mock_conn = {
+                execute = function(self, sql)
+                    return nil, "connection lost"
+                end
+            }
+            driver._conn = mock_conn
+            driver:_detectVersion()
+            assert.is_true(driver:versionDetectionFailed())
+            assert.is_false(driver:supportsReturning())
+        end)
+
+        it("sets _version_detection_failed when query fails without message", function()
+            local mock_conn = {
+                execute = function(self, sql)
+                    return nil, nil
+                end
+            }
+            driver._conn = mock_conn
+            driver:_detectVersion()
+            assert.is_true(driver:versionDetectionFailed())
+            assert.is_false(driver:supportsReturning())
+        end)
+
+        it("supportsReturning returns true when version >= 10.5", function()
+            driver._version_detection_failed = false
+            local mock_conn = {
+                execute = function(self, sql)
+                    return {
+                        fetch = function(self, t, mode)
+                            return { version = "10.5.8-MariaDB" }
+                        end
+                    }
+                end
+            }
+            driver._conn = mock_conn
+            driver:_detectVersion()
+            assert.is_true(driver:supportsReturning())
+            assert.is_false(driver:versionDetectionFailed())
+        end)
+
+        it("supportsReturning returns false when version < 10.5", function()
+            driver._version_detection_failed = false
+            local mock_conn = {
+                execute = function(self, sql)
+                    return {
+                        fetch = function(self, t, mode)
+                            return { version = "10.4.12-MariaDB" }
+                        end
+                    }
+                end
+            }
+            driver._conn = mock_conn
+            driver:_detectVersion()
+            assert.is_false(driver:supportsReturning())
+            assert.is_false(driver:versionDetectionFailed())
         end)
     end)
 end)
