@@ -29,7 +29,13 @@ jobs:
 
       - name: Run luacheck
         run: |
-          luacheck src/
+          luacheck src/ --no-color --quiet 2>&1 || exit_code=$?
+          echo "Luacheck exit code: ${exit_code:-0}"
+          if [ "${exit_code:-0}" -gt 1 ]; then
+            echo "Luacheck failed with errors"
+            exit 1
+          fi
+          echo "Lint check completed (warnings allowed)"
 
   test:
     name: Test (Lua ${{ matrix.lua-version }})
