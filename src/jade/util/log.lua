@@ -23,6 +23,10 @@ function M.info(msg)
     print("[INFO] " .. msg)
 end
 
+function M.warn(msg)
+    io.stderr:write("[WARN] " .. msg .. "\n")
+end
+
 function M.error(msg)
     io.stderr:write("[ERROR] " .. msg .. "\n")
 end
