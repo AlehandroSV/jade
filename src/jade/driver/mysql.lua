@@ -67,6 +67,7 @@ function MySQL:_ensureConnected()
         error("Failed to connect to MySQL: " .. tostring(err))
     end
     self._conn = conn
+    self:setEncryptionKey()
 end
 
 function MySQL:disconnect()
@@ -96,6 +97,20 @@ function MySQL:quoteIdentifier(name)
     return "`" .. name:gsub("`", "``") .. "`"
 end
 
+-- Set encryption key as session variable to avoid exposing it in SQL strings
+function MySQL:setEncryptionKey()
+    local Encryption = require("jade.encryption")
+    if Encryption.isEnabled() then
+        local key = Encryption.getKey()
+        local escaped_key = key:gsub("'", "''")
+        local sql = "SET @jade_encryption_key = '" .. escaped_key .. "'"
+        local res, err = self._conn:execute(sql)
+        if not res then
+            error("Failed to set encryption key session variable: " .. tostring(err))
+        end
+    end
+end
+
 -- Transaction methods
 function MySQL:getConnection()
     local conn, err = self._env:connect(
@@ -107,6 +122,17 @@ function MySQL:getConnection()
     )
     if not conn then
         error("Failed to connect to MySQL: " .. tostring(err))
+    end
+    -- Set encryption key for new connection
+    local Encryption = require("jade.encryption")
+    if Encryption.isEnabled() then
+        local key = Encryption.getKey()
+        local escaped_key = key:gsub("'", "''")
+        local sql = "SET @jade_encryption_key = '" .. escaped_key .. "'"
+        local res, set_err = conn:execute(sql)
+        if not res then
+            error("Failed to set encryption key session variable: " .. tostring(set_err))
+        end
     end
     return conn
 end
@@ -254,11 +280,10 @@ function MySQL:generateSelect(query)
                 for col_name, _ in pairs(columns) do
                     local col_ref = self:quoteIdentifier(col_name)
                     if fields[col_name] then
-                        -- Encrypted column: wrap with AES_DECRYPT
-                        local key = Encryption.getKey()
+                        -- Encrypted column: wrap with AES_DECRYPT using session variable
                         select_parts[#select_parts + 1] = string.format(
-                            "CAST(AES_DECRYPT(%s, '%s') AS CHAR) AS %s",
-                            col_ref, key:gsub("'", "''"), col_ref
+                            "CAST(AES_DECRYPT(%s, @jade_encryption_key) AS CHAR) AS %s",
+                            col_ref, col_ref
                         )
                     else
                         select_parts[#select_parts + 1] = col_ref
@@ -360,8 +385,8 @@ function MySQL:generateInsert(table_name, data, entity)
     for key, value in pairs(data) do
         columns[#columns + 1] = self:quoteIdentifier(key)
         if encrypt_cols[key] and Encryption.isEnabled() then
-            -- Use MySQL AES_ENCRYPT
-            placeholders[#placeholders + 1] = "AES_ENCRYPT(?, '" .. Encryption.getKey():gsub("'", "''") .. "')"
+            -- Use MySQL AES_ENCRYPT with session variable
+            placeholders[#placeholders + 1] = "AES_ENCRYPT(?, @jade_encryption_key)"
         else
             placeholders[#placeholders + 1] = "?"
         end
@@ -503,7 +528,7 @@ function MySQL:generateUpdate(table_name, data, where)
 
     for key, value in pairs(data) do
         if encrypt_cols[key] and Encryption.isEnabled() then
-            set_parts[#set_parts + 1] = self:quoteIdentifier(key) .. " = AES_ENCRYPT(?, '" .. Encryption.getKey():gsub("'", "''") .. "')"
+            set_parts[#set_parts + 1] = self:quoteIdentifier(key) .. " = AES_ENCRYPT(?, @jade_encryption_key)"
         else
             set_parts[#set_parts + 1] = self:quoteIdentifier(key) .. " = ?"
         end

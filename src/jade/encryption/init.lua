@@ -150,6 +150,7 @@ end
 
 --- Wrap a column reference with encryption function for INSERT/UPDATE
 --- Only used for native (database-level) encryption
+--- Uses session variables to avoid exposing the key in SQL strings
 --- @param column_ref string The quoted column reference (e.g., '"email"')
 --- @param driver table The database driver
 --- @return string SQL fragment with encryption
@@ -158,13 +159,14 @@ function M.wrapEncrypt(column_ref, driver)
         return column_ref
     end
 
-    local key = enc_config.key
     local driver_type = driver._driver_type or "postgresql"
 
     if driver_type == "postgresql" then
-        return string.format("pgp_sym_encrypt(%s::text, '%s')", column_ref, key:gsub("'", "''"))
+        -- Use session variable via current_setting() to avoid key exposure in SQL
+        return string.format("pgp_sym_encrypt(%s::text, current_setting('jade.encryption_key'))", column_ref)
     elseif driver_type == "mysql" then
-        return string.format("AES_ENCRYPT(%s, '%s')", column_ref, key:gsub("'", "''"))
+        -- Use session variable @jade_encryption_key to avoid key exposure in SQL
+        return string.format("AES_ENCRYPT(%s, @jade_encryption_key)", column_ref)
     else
         error("Database encryption is not supported for " .. driver_type .. ". Use PostgreSQL with pgcrypto or MySQL.")
     end
@@ -172,6 +174,7 @@ end
 
 --- Wrap a column reference with decryption function for SELECT
 --- Only used for native (database-level) encryption
+--- Uses session variables to avoid exposing the key in SQL strings
 --- @param column_ref string The quoted column reference (e.g., '"email"')
 --- @param driver table The database driver
 --- @param as_name string Optional alias for the decrypted column
@@ -181,14 +184,15 @@ function M.wrapDecrypt(column_ref, driver, as_name)
         return column_ref
     end
 
-    local key = enc_config.key
     local driver_type = driver._driver_type or "postgresql"
     local alias = as_name and (" AS " .. as_name) or ""
 
     if driver_type == "postgresql" then
-        return string.format("pgp_sym_decrypt(%s, '%s')%s", column_ref, key:gsub("'", "''"), alias)
+        -- Use session variable via current_setting() to avoid key exposure in SQL
+        return string.format("pgp_sym_decrypt(%s, current_setting('jade.encryption_key'))%s", column_ref, alias)
     elseif driver_type == "mysql" then
-        return string.format("CAST(AES_DECRYPT(%s, '%s') AS CHAR)%s", column_ref, key:gsub("'", "''"), alias)
+        -- Use session variable @jade_encryption_key to avoid key exposure in SQL
+        return string.format("CAST(AES_DECRYPT(%s, @jade_encryption_key) AS CHAR)%s", column_ref, alias)
     else
         error("Database decryption is not supported for " .. driver_type .. ". Use PostgreSQL with pgcrypto or MySQL.")
     end
