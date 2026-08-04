@@ -1,4 +1,5 @@
 local MySQL = require("jade.driver.mysql")
+local log = require("jade.util.log")
 
 local MariaDB = {}
 MariaDB.__index = MariaDB
@@ -13,6 +14,7 @@ function MariaDB.new()
     setmetatable(self, MariaDB)
     self._mariadb_version = nil
     self._supports_returning = false
+    self._version_detection_failed = false
     return self
 end
 
@@ -22,10 +24,14 @@ function MariaDB:connect(config)
     return self
 end
 
+-- Detects MariaDB version and enables RETURNING if >= 10.5.
+-- On failure, sets _version_detection_failed = true and disables RETURNING silently.
 function MariaDB:_detectVersion()
     self:_ensureConnected()
     local res, err = self._conn:execute("SELECT VERSION() as version")
     if not res then
+        self._version_detection_failed = true
+        log.warn("[MariaDB] Version detection failed: " .. tostring(err) .. ". RETURNING support disabled.")
         return
     end
     local row = res:fetch({}, "a")
@@ -71,35 +77,30 @@ function MariaDB:generateUpsert(table_name, data, conflict_columns, entity)
     return sql, bindings
 end
 
+function MariaDB:generateBulkInsert(table_name, rows, entity)
+    local sql, bindings = MySQL.generateBulkInsert(self, table_name, rows, entity)
+    if self._supports_returning then
+        sql = sql .. " RETURNING *"
+    end
+    return sql, bindings
+end
+
 function MariaDB:mapType(column_type)
-    local map = {
-        string = "VARCHAR(" .. (column_type.length or 255) .. ")",
-        text = "TEXT",
-        mediumtext = "MEDIUMTEXT",
-        longtext = "LONGTEXT",
-        integer = "INTEGER",
-        tinyint = "TINYINT",
-        smallint = "SMALLINT",
-        bigint = "BIGINT",
-        float = "DOUBLE",
-        decimal = "DECIMAL(" .. (column_type.precision or 10) .. "," .. (column_type.scale or 2) .. ")",
-        boolean = "TINYINT(1)",
-        timestamp = "TIMESTAMP",
-        date = "DATE",
-        datetime = "DATETIME",
+    local mariadb_overrides = {
         json = "JSON",
-        cuid = "VARCHAR(25)",
-        nanoid = "VARCHAR(21)",
-        enum = "TEXT",
         uuid = "UUID",
         inet4 = "INET4",
         inet6 = "INET6",
     }
-    return map[column_type.type] or "TEXT"
+    return mariadb_overrides[column_type.type] or MySQL.mapType(self, column_type)
 end
 
-function MariaDB:getLastInsertId()
-    return MySQL.getLastInsertId(self)
+function MariaDB:supportsReturning()
+    return self._supports_returning
+end
+
+function MariaDB:versionDetectionFailed()
+    return self._version_detection_failed
 end
 
 return MariaDB
