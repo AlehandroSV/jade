@@ -71,14 +71,15 @@ function PostgreSQL:closeConnection(conn)
 end
 
 -- Set encryption key as session variable to avoid exposing it in SQL strings
-function PostgreSQL:setEncryptionKey()
+-- Uses parameterized query to prevent key exposure in SET statement itself
+function PostgreSQL:setEncryptionKey(conn)
+    conn = conn or self._conn
     local Encryption = require("jade.encryption")
     if Encryption.isEnabled() then
         local key = Encryption.getKey()
-        -- Use set_config with session scope (true = session, false = transaction)
-        local escaped_key = key:gsub("'", "''")
-        local sql = string.format("SELECT set_config('jade.encryption_key', '%s', true)", escaped_key)
-        local res, err = self._conn:query(sql)
+        -- Use parameterized query to avoid key exposure in SQL logs
+        local sql = "SELECT set_config('jade.encryption_key', $1, true)"
+        local res, err = conn:query(sql, key)
         if not res then
             error("Failed to set encryption key session variable: " .. tostring(err))
         end
@@ -93,16 +94,7 @@ function PostgreSQL:getConnection()
         error("Failed to connect to PostgreSQL: " .. tostring(err))
     end
     -- Set encryption key for new connection
-    local Encryption = require("jade.encryption")
-    if Encryption.isEnabled() then
-        local key = Encryption.getKey()
-        local escaped_key = key:gsub("'", "''")
-        local sql = string.format("SELECT set_config('jade.encryption_key', '%s', true)", escaped_key)
-        local res, set_err = pg:query(sql)
-        if not res then
-            error("Failed to set encryption key session variable: " .. tostring(set_err))
-        end
-    end
+    self:setEncryptionKey(pg)
     return pg
 end
 
@@ -520,13 +512,13 @@ function PostgreSQL:generateUpsert(table_name, data, conflict_columns, entity)
     return sql, bindings
 end
 
-function PostgreSQL:generateUpdate(table_name, data, where)
+function PostgreSQL:generateUpdate(table_name, data, where, entity)
     local set_parts = {}
     local bindings = {}
     local i = 1
 
     local Encryption = require("jade.encryption")
-    local encrypt_cols = {}  -- Will be set by entity if needed
+    local encrypt_cols = entity and entity._encrypt_cols or {}
 
     for key, value in pairs(data) do
         if encrypt_cols[key] and Encryption.isEnabled() then
