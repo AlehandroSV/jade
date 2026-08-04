@@ -453,7 +453,7 @@ function SQLite:generateUpsert(table_name, data, conflict_columns, entity)
     return sql, bindings
 end
 
-function SQLite:generateUpdate(table_name, data, where)
+function SQLite:generateUpdate(table_name, data, where, entity)
     local set_parts = {}
     local bindings = {}
 
