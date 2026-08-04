@@ -10,7 +10,7 @@ describe("Security - Escape Functions", function()
         -- escapeString no longer throws on SQL injection patterns
         -- Values should be protected via prepared statements, not regex detection
         local result = sanitizer.escapeString("' OR '1'='1")
-        assert.are.equal("'' OR ''1''=''1'", result)
+        assert.are.equal("''' OR ''1''=''1'", result)
     end)
 
     it("returns NULL for nil", function()
