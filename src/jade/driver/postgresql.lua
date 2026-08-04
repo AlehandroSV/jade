@@ -49,6 +49,7 @@ function PostgreSQL:_ensureConnected()
         error("Failed to connect to PostgreSQL: " .. tostring(err))
     end
     self._conn = pg
+    self:setEncryptionKey()
 end
 
 function PostgreSQL:disconnect()
@@ -69,12 +70,38 @@ function PostgreSQL:closeConnection(conn)
     end
 end
 
+-- Set encryption key as session variable to avoid exposing it in SQL strings
+function PostgreSQL:setEncryptionKey()
+    local Encryption = require("jade.encryption")
+    if Encryption.isEnabled() then
+        local key = Encryption.getKey()
+        -- Use set_config with session scope (true = session, false = transaction)
+        local escaped_key = key:gsub("'", "''")
+        local sql = string.format("SELECT set_config('jade.encryption_key', '%s', true)", escaped_key)
+        local res, err = self._conn:query(sql)
+        if not res then
+            error("Failed to set encryption key session variable: " .. tostring(err))
+        end
+    end
+end
+
 -- Transaction methods
 function PostgreSQL:getConnection()
     local pg = pgmoon.new(self._config)
     local ok, err = pg:connect()
     if not ok then
         error("Failed to connect to PostgreSQL: " .. tostring(err))
+    end
+    -- Set encryption key for new connection
+    local Encryption = require("jade.encryption")
+    if Encryption.isEnabled() then
+        local key = Encryption.getKey()
+        local escaped_key = key:gsub("'", "''")
+        local sql = string.format("SELECT set_config('jade.encryption_key', '%s', true)", escaped_key)
+        local res, set_err = pg:query(sql)
+        if not res then
+            error("Failed to set encryption key session variable: " .. tostring(set_err))
+        end
     end
     return pg
 end
@@ -210,11 +237,10 @@ function PostgreSQL:generateSelect(query)
                 for col_name, _ in pairs(columns) do
                     local col_ref = Quoting.quoteIdentifier(col_name)
                     if fields[col_name] then
-                        -- Encrypted column: wrap with decryption
-                        local key = Encryption.getKey()
+                        -- Encrypted column: wrap with decryption using session variable
                         select_parts[#select_parts + 1] = string.format(
-                            "pgp_sym_decrypt(%s, '%s') AS %s",
-                            col_ref, key:gsub("'", "''"), col_ref
+                            "pgp_sym_decrypt(%s, current_setting('jade.encryption_key')) AS %s",
+                            col_ref, col_ref
                         )
                     else
                         select_parts[#select_parts + 1] = col_ref
@@ -330,8 +356,8 @@ function PostgreSQL:generateInsert(table_name, data, entity)
     for key, value in pairs(data) do
         columns[#columns + 1] = Quoting.quoteIdentifier(key)
         if encrypt_cols[key] and Encryption.isEnabled() then
-            -- Use pgcrypto encryption function
-            placeholders[#placeholders + 1] = "pgp_sym_encrypt($" .. i .. "::text, '" .. Encryption.getKey():gsub("'", "''") .. "')"
+            -- Use pgcrypto encryption function with session variable
+            placeholders[#placeholders + 1] = "pgp_sym_encrypt($" .. i .. "::text, current_setting('jade.encryption_key'))"
         else
             placeholders[#placeholders + 1] = "$" .. i
         end
@@ -503,7 +529,7 @@ function PostgreSQL:generateUpdate(table_name, data, where)
 
     for key, value in pairs(data) do
         if encrypt_cols[key] and Encryption.isEnabled() then
-            set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = pgp_sym_encrypt($" .. i .. "::text, '" .. Encryption.getKey():gsub("'", "''") .. "')"
+            set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = pgp_sym_encrypt($" .. i .. "::text, current_setting('jade.encryption_key'))"
         else
             set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = $" .. i
         end
