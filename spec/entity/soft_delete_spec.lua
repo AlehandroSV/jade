@@ -118,20 +118,27 @@ describe("Soft Delete", function()
             assert.is_true(q._only_trashed)
         end)
 
-        it("Entity:withTrashed returns Query with flag", function()
+        it("Entity:withTrashed returns Query com flags explícitos", function()
             local q = User:withTrashed()
             assert.is_true(q._include_trashed)
+            assert.is_false(q._only_trashed)
         end)
 
-        it("Entity:onlyTrashed returns Query with flag", function()
+        it("Entity:onlyTrashed returns Query com flags explícitos", function()
             local q = User:onlyTrashed()
+            assert.is_false(q._include_trashed)
             assert.is_true(q._only_trashed)
+        end)
+
+        it("Entity:withoutTrashed returns Query sem flags trashed", function()
+            local q = User:withoutTrashed()
+            assert.is_false(q._include_trashed)
+            assert.is_false(q._only_trashed)
         end)
 
         it("preserves soft delete flags in first()", function()
             local q = Query.new(User):withTrashed()
             -- first() creates a new Query, flags should be preserved
-            -- We can't easily test the SQL without a driver, but we can test the flags
             assert.is_true(q._include_trashed)
         end)
 
@@ -143,6 +150,14 @@ describe("Soft Delete", function()
         it("preserves soft delete flags in count()", function()
             local q = Query.new(User):withTrashed()
             assert.is_true(q._include_trashed)
+        end)
+
+        it("onlyTrashed resetea include_trashed (mutual exclusão)", function()
+            -- onlyTrashed garante _only_trashed=true e _include_trashed=false,
+            -- mesmo após chamado de withTrashed
+            local q1 = User:withTrashed():onlyTrashed()
+            assert.is_false(q1._include_trashed)
+            assert.is_true(q1._only_trashed)
         end)
     end)
 end)
