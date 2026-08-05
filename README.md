@@ -124,6 +124,64 @@ jade.configure({ database = { driver = "mariadb", ... } })
 jade.configure({ database = { driver = "sqlite", database = "app.db" } })
 ```
 
+### SSL/TLS (PostgreSQL)
+
+Jade supports SSL/TLS connections for PostgreSQL to secure data in transit:
+
+```lua
+-- Basic SSL
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+    }
+})
+
+-- SSL with certificate verification
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+    }
+})
+
+-- Mutual TLS (mTLS) with client certificate
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+        ssl_cert = "/path/to/client-cert.pem",
+        ssl_key = "/path/to/client-key.pem",
+    }
+})
+```
+
+**SSL Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `ssl` | boolean | `false` | Enable SSL/TLS |
+| `ssl_verify` | boolean | `nil` | Verify server certificate |
+| `ssl_ca` | string | `nil` | Path to CA certificate |
+| `ssl_cert` | string | `nil` | Path to client certificate (mTLS) |
+| `ssl_key` | string | `nil` | Path to client key (mTLS) |
+
 ### Declarative Schema
 
 Define entities with conventions — Jade handles the rest:
@@ -862,6 +920,64 @@ user:delete()
 | MySQL | luasql-mysql | AUTO_INCREMENT, quoting com backtick, ENGINE=InnoDB |
 | MariaDB | luasql-mysql | RETURNING (10.5+), JSON, UUID, INET4/6, deteccao automatica de versao |
 | SQLite | luasql-sqlite3 | AUTOINCREMENT, modo WAL, pragma foreign_keys |
+
+### SSL/TLS (PostgreSQL)
+
+Jade suporta conexões SSL/TLS para PostgreSQL para proteger dados em trânsito:
+
+```lua
+-- SSL básico
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+    }
+})
+
+-- SSL com verificação de certificado
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+    }
+})
+
+-- TLS Mútuo (mTLS) com certificado do cliente
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+        ssl_cert = "/path/to/client-cert.pem",
+        ssl_key = "/path/to/client-key.pem",
+    }
+})
+```
+
+**Opções SSL:**
+
+| Opção | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `ssl` | boolean | `false` | Habilitar SSL/TLS |
+| `ssl_verify` | boolean | `nil` | Verificar certificado do servidor |
+| `ssl_ca` | string | `nil` | Caminho para certificado CA |
+| `ssl_cert` | string | `nil` | Caminho para certificado do cliente (mTLS) |
+| `ssl_key` | string | `nil` | Caminho para chave do cliente (mTLS) |
 
 ### Schema Declarativo
 
