@@ -1,0 +1,335 @@
+describe("Connection Pool", function()
+    local Pool = require("jade.driver.pool")
+
+    local function mock_driver()
+        local conn_counter = 0
+        local driver = {
+            connections_created = {},
+            connections_closed = {},
+            execute_calls = {},
+        }
+
+        function driver:getConnection()
+            conn_counter = conn_counter + 1
+            local conn = { id = conn_counter }
+            table.insert(driver.connections_created, conn)
+            return conn
+        end
+
+        function driver:executeWithConnection(conn, sql, bindings)
+            table.insert(driver.execute_calls, { conn = conn, sql = sql, bindings = bindings })
+            return { rows = {}, affected = 1 }
+        end
+
+        function driver:closeConnection(conn)
+            table.insert(driver.connections_closed, conn)
+        end
+
+        function driver:disconnect(conn)
+            table.insert(driver.connections_closed, conn)
+        end
+
+        return driver
+    end
+
+    describe("Pool.new", function()
+        it("pre-creates min_size connections", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 3 })
+
+            assert.are.equal(3, #pool.connections)
+            assert.are.equal(3, pool.created)
+        end)
+
+        it("defaults min_size to 2", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver)
+
+            assert.are.equal(2, #pool.connections)
+        end)
+
+        it("initializes abandoned_timeout from options", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { abandoned_timeout = 120 })
+
+            assert.are.equal(120, pool.abandoned_timeout)
+        end)
+
+        it("defaults abandoned_timeout to 60", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver)
+
+            assert.are.equal(60, pool.abandoned_timeout)
+        end)
+    end)
+
+    describe("acquire / release", function()
+        it("returns an idle connection", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 2 })
+
+            local conn = pool:acquire()
+            assert.is_truthy(conn)
+            assert.are.equal(1, pool.checked_out)
+        end)
+
+        it("reuses released connection", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1 })
+
+            local conn1 = pool:acquire()
+            pool:release(conn1)
+            local conn2 = pool:acquire()
+
+            assert.are.equal(conn1, conn2)
+        end)
+
+        it("creates new connection when all are in use", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, max_size = 2 })
+
+            local conn1 = pool:acquire()
+            local conn2 = pool:acquire()
+
+            assert.is_true(conn1 ~= conn2)
+            assert.are.equal(2, pool.created)
+        end)
+
+        it("errors when pool is exhausted", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1 })
+
+            pool:acquire()
+
+            assert.has_error(function()
+                pool:acquire()
+            end)
+        end)
+    end)
+
+    describe("withConnection", function()
+        it("executes function and returns result", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1 })
+
+            local result = pool:withConnection(function(conn)
+                return driver:executeWithConnection(conn, "SELECT 1")
+            end)
+
+            assert.is_truthy(result)
+            assert.are.equal(0, pool.checked_out)
+        end)
+
+        it("releases connection when function succeeds", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1 })
+
+            pool:withConnection(function(conn)
+                return "ok"
+            end)
+
+            assert.are.equal(0, pool.checked_out)
+            assert.is_false(pool.connections[1].in_use)
+        end)
+
+        it("releases connection when function throws error", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1 })
+
+            assert.has_error(function()
+                pool:withConnection(function(conn)
+                    error("boom")
+                end)
+            end)
+
+            assert.are.equal(0, pool.checked_out)
+            assert.is_false(pool.connections[1].in_use)
+        end)
+
+        it("releases connection even when error occurs mid-operation", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1 })
+
+            assert.has_error(function()
+                pool:withConnection(function(conn)
+                    local x = nil
+                    x.foo = 1
+                end)
+            end)
+
+            assert.are.equal(0, pool.checked_out)
+
+            local conn = pool:acquire()
+            assert.is_truthy(conn)
+            pool:release(conn)
+        end)
+
+        it("propagates error message from inner function", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1 })
+
+            local ok, err = pcall(function()
+                pool:withConnection(function(conn)
+                    error("custom error message")
+                end)
+            end)
+
+            assert.is_false(ok)
+            assert.is_truthy(string.find(err, "custom error message"))
+        end)
+
+        it("does not leak connections under repeated failures", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1 })
+
+            for i = 1, 10 do
+                pcall(function()
+                    pool:withConnection(function(conn)
+                        error("fail #" .. i)
+                    end)
+                end)
+            end
+
+            assert.are.equal(0, pool.checked_out)
+            assert.are.equal(1, pool.created)
+        end)
+    end)
+
+    describe("abandoned connection detection", function()
+        it("recycles connection idle longer than abandoned_timeout", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 10 })
+
+            local conn = pool:acquire()
+            pool.connections[1].last_used = os.time() - 20
+
+            pool:_cleanIdleConnections()
+
+            assert.are.equal(0, #pool.connections)
+            assert.are.equal(0, pool.created)
+            assert.are.equal(0, pool.checked_out)
+        end)
+
+        it("does not recycle connection within abandoned_timeout", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 60 })
+
+            local conn = pool:acquire()
+            pool:_cleanIdleConnections()
+
+            assert.are.equal(1, #pool.connections)
+            assert.are.equal(1, pool.created)
+            assert.are.equal(1, pool.checked_out)
+        end)
+
+        it("closes abandoned connection via driver", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 10 })
+
+            local conn = pool:acquire()
+            pool.connections[1].last_used = os.time() - 20
+
+            pool:_cleanIdleConnections()
+
+            assert.are.equal(1, #driver.connections_closed)
+            assert.are.equal(conn, driver.connections_closed[1])
+        end)
+
+        it("recycles multiple abandoned connections", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 2, max_size = 2, abandoned_timeout = 10 })
+
+            pool:acquire()
+            pool:acquire()
+
+            pool.connections[1].last_used = os.time() - 20
+            pool.connections[2].last_used = os.time() - 20
+
+            pool:_cleanIdleConnections()
+
+            assert.are.equal(0, #pool.connections)
+            assert.are.equal(0, pool.created)
+            assert.are.equal(0, pool.checked_out)
+        end)
+
+        it("respects custom abandoned_timeout value", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 30 })
+
+            local conn = pool:acquire()
+
+            pool.connections[1].last_used = os.time() - 25
+            pool:_cleanIdleConnections()
+            assert.are.equal(1, #pool.connections)
+
+            pool.connections[1].last_used = os.time() - 35
+            pool:_cleanIdleConnections()
+            assert.are.equal(0, #pool.connections)
+        end)
+
+        it("logs warning when recycling abandoned connection", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 10 })
+
+            pool:acquire()
+            pool.connections[1].last_used = os.time() - 20
+
+            local captured = {}
+            local original_write = io.write
+            io.write = function(msg)
+                table.insert(captured, msg)
+            end
+
+            pool:_cleanIdleConnections()
+
+            io.write = original_write
+
+            assert.are.equal(1, #captured)
+            assert.is_truthy(string.find(captured[1], "%[WARN%]"))
+            assert.is_truthy(string.find(captured[1], "recycled abandoned connection"))
+        end)
+    end)
+
+    describe("execute", function()
+        it("acquires, executes, and releases", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1 })
+
+            local result = pool:execute("SELECT 1")
+
+            assert.is_truthy(result)
+            assert.are.equal(0, pool.checked_out)
+            assert.are.equal(2, #driver.execute_calls)
+            assert.are.equal("SELECT 1", driver.execute_calls[2].sql)
+        end)
+
+        it("releases connection even when execute throws", function()
+            local driver = mock_driver()
+            driver.executeWithConnection = function(self, conn, sql, bindings)
+                error("SQL error")
+            end
+
+            local pool = Pool.new(driver, { min_size = 1 })
+
+            assert.has_error(function()
+                pool:execute("BAD SQL")
+            end)
+
+            assert.are.equal(0, pool.checked_out)
+        end)
+    end)
+
+    describe("close", function()
+        it("closes all connections", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 3 })
+
+            pool:close()
+
+            assert.are.equal(0, pool.created)
+            assert.are.equal(0, pool.checked_out)
+            assert.are.equal(0, #pool.connections)
+            assert.are.equal(3, #driver.connections_closed)
+        end)
+    end)
+end)

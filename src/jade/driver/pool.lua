@@ -5,6 +5,7 @@ function Pool.new(driver, options)
     options = options or {}
     local pool = setmetatable({
         driver = driver,
+        abandoned_timeout = options.abandoned_timeout or 60,
         connections = {},
         max_size = options.max_size or 10,
         min_size = options.min_size or 2,
@@ -43,7 +44,20 @@ function Pool:_cleanIdleConnections()
     local i = 1
     while i <= #self.connections do
         local entry = self.connections[i]
-        if not entry.in_use and (now - entry.last_used) > self.idle_timeout then
+        if entry.in_use and (now - entry.last_used) > self.abandoned_timeout then
+            -- Connection is abandoned, close it
+            pcall(function()
+                if self.driver.closeConnection then
+                    self.driver:closeConnection(entry.connection)
+                else
+                    self.driver:disconnect(entry.connection)
+                end
+            end)
+            table.remove(self.connections, i)
+            self.created = self.created - 1
+            self.checked_out = self.checked_out - 1
+            io.write(string.format('[WARN] Pool: recycled abandoned connection (idle %ds > %ds timeout)\n', now - entry.last_used, self.abandoned_timeout))
+        elseif not entry.in_use and (now - entry.last_used) > self.idle_timeout then
             -- Connection is idle too long, close it
             pcall(function()
                 if self.driver.closeConnection then
@@ -116,6 +130,16 @@ function Pool:release(conn)
             return
         end
     end
+end
+
+function Pool:withConnection(fn)
+    local conn = self:acquire()
+    local ok, result = pcall(fn, conn)
+    self:release(conn)
+    if not ok then
+        error(result)
+    end
+    return result
 end
 
 function Pool:close()
