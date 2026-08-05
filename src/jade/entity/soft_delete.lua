@@ -10,7 +10,7 @@ function M.setup(entity, options)
 
     -- Add deleted_at column to entity
     local Timestamp = require("jade.types.timestamp")
-    entity._columns[column] = Timestamp():defaultNow()
+    entity._columns[column] = Timestamp():nullable()
     entity._columns[column]._name = column
     entity._columns[column]._table = entity._table
 
@@ -126,12 +126,11 @@ function M.setup(entity, options)
     end
 
     function entity:withTrashed()
-        return Query.new(self)
+        return Query.new(self):withTrashed()
     end
 
     function entity:onlyTrashed()
-        local where = Condition.new(column, "IS NOT", nil, self._table)
-        return Query.new(self):where(where)
+        return Query.new(self):onlyTrashed()
     end
 
     function entity:restore(id)
@@ -146,18 +145,6 @@ function M.setup(entity, options)
         local where = Condition.new("id", "=", id, self._table)
         local sql, bindings = self._driver:generateUpdate(self._table, data, where)
         return self._driver:execute(sql, bindings)
-    end
-
-    -- Override get to exclude soft-deleted rows by default
-    entity.get = function(self)
-        local where = Condition.new(column, "IS", nil, self._table)
-        return Query.new(self):where(where):get()
-    end
-
-    -- Add scope methods for queries
-    function entity:withoutTrashed()
-        local where = Condition.new(column, "IS", nil, self._table)
-        return Query.new(self):where(where)
     end
 
     return entity
