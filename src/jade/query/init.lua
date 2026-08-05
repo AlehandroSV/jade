@@ -24,7 +24,23 @@ function Query.new(entity)
         _distinct = false,
         _cache_ttl = nil,
         _cache_key = nil,
+        _include_trashed = false,
+        _only_trashed = false,
     }, Query)
+end
+
+-- Include soft-deleted records in results
+function Query:withTrashed()
+    self._include_trashed = true
+    self._only_trashed = false
+    return self
+end
+
+-- Return only soft-deleted records
+function Query:onlyTrashed()
+    self._include_trashed = false
+    self._only_trashed = true
+    return self
 end
 
 function Query:where(condition)
@@ -415,6 +431,8 @@ function Query:first()
     q._distinct = self._distinct
     q._limit = 1
     q._offset = self._offset
+    q._include_trashed = self._include_trashed
+    q._only_trashed = self._only_trashed
     local results = q:get()
     return results[1]
 end
@@ -431,6 +449,8 @@ function Query:find(id)
     q._distinct = self._distinct
     q._limit = 1
     q._offset = self._offset
+    q._include_trashed = self._include_trashed
+    q._only_trashed = self._only_trashed
     local results = q:get()
     return results[1]
 end
@@ -447,6 +467,8 @@ function Query:count()
     q._distinct = self._distinct
     q._limit = self._limit
     q._offset = self._offset
+    q._include_trashed = self._include_trashed
+    q._only_trashed = self._only_trashed
     local sql, bindings = q:toSQL()
     local driver = self._entity._driver
     local result = driver:execute(sql, bindings)
@@ -647,6 +669,19 @@ function Query:_compileWhere()
 end
 
 function Query:toSQL()
+    -- Apply soft delete filter if entity has soft delete enabled
+    local SoftDelete = require("jade.entity.soft_delete")
+    if SoftDelete.isSoftDeleted(self._entity) and not self._include_trashed then
+        local col = SoftDelete.getSoftDeleteColumn(self._entity)
+        if self._only_trashed then
+            -- Only return soft-deleted records
+            self._where[#self._where + 1] = Condition.new(col, "IS NOT", nil, self._table)
+        else
+            -- Exclude soft-deleted records (default behavior)
+            self._where[#self._where + 1] = Condition.new(col, "IS", nil, self._table)
+        end
+    end
+
     local driver = self._entity._driver
     local sql, bindings = driver:generateSelect(self)
     Security.validateQuery(sql, bindings)
