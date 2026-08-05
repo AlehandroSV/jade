@@ -26,7 +26,12 @@ function PostgreSQL:connect(config)
         port = config.port or 5432,
         database = config.database,
         user = config.user or "postgres",
-        password = config.password or ""
+        password = config.password or "",
+        ssl = config.ssl or false,
+        ssl_verify = config.ssl_verify,
+        ssl_ca = config.ssl_ca,
+        ssl_cert = config.ssl_cert,
+        ssl_key = config.ssl_key,
     }
 
     -- Initialize connection pool if pool_size is specified
@@ -44,6 +49,21 @@ end
 function PostgreSQL:_ensureConnected()
     if self._conn then return end
     local pg = pgmoon.new(self._config)
+    if self._config.ssl then
+        pg:sslmode("require")
+        if self._config.ssl_verify == false then
+            pg:sslmode("require")
+        end
+        if self._config.ssl_ca then
+            pg:sslrootcert(self._config.ssl_ca)
+        end
+        if self._config.ssl_cert then
+            pg:sslcert(self._config.ssl_cert)
+        end
+        if self._config.ssl_key then
+            pg:sslkey(self._config.ssl_key)
+        end
+    end
     local ok, err = pg:connect()
     if not ok then
         error("Failed to connect to PostgreSQL: " .. tostring(err))
@@ -89,6 +109,18 @@ end
 -- Transaction methods
 function PostgreSQL:getConnection()
     local pg = pgmoon.new(self._config)
+    if self._config.ssl then
+        pg:sslmode("require")
+        if self._config.ssl_ca then
+            pg:sslrootcert(self._config.ssl_ca)
+        end
+        if self._config.ssl_cert then
+            pg:sslcert(self._config.ssl_cert)
+        end
+        if self._config.ssl_key then
+            pg:sslkey(self._config.ssl_key)
+        end
+    end
     local ok, err = pg:connect()
     if not ok then
         error("Failed to connect to PostgreSQL: " .. tostring(err))

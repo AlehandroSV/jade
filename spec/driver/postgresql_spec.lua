@@ -111,4 +111,96 @@ describe("PostgreSQL Driver SQL Generation", function()
             assert.is_truth(string.find(sql, "RETURNING"))
         end)
     end)
+
+    describe("SSL Configuration", function()
+        it("stores ssl option when enabled", function()
+            local pg = PostgreSQL.new()
+            pg:connect({
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+            })
+            assert.is_true(pg._config.ssl)
+        end)
+
+        it("defaults ssl to false", function()
+            local pg = PostgreSQL.new()
+            pg:connect({
+                host = "localhost",
+                database = "test",
+                user = "test",
+            })
+            assert.is_false(pg._config.ssl)
+        end)
+
+        it("stores ssl_verify option", function()
+            local pg = PostgreSQL.new()
+            pg:connect({
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_verify = true,
+            })
+            assert.is_true(pg._config.ssl_verify)
+        end)
+
+        it("stores ssl_ca certificate path", function()
+            local pg = PostgreSQL.new()
+            pg:connect({
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_ca = "/path/to/ca.pem",
+            })
+            assert.are.equal("/path/to/ca.pem", pg._config.ssl_ca)
+        end)
+
+        it("stores ssl_cert certificate path", function()
+            local pg = PostgreSQL.new()
+            pg:connect({
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_cert = "/path/to/cert.pem",
+            })
+            assert.are.equal("/path/to/cert.pem", pg._config.ssl_cert)
+        end)
+
+        it("stores ssl_key key path", function()
+            local pg = PostgreSQL.new()
+            pg:connect({
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_key = "/path/to/key.pem",
+            })
+            assert.are.equal("/path/to/key.pem", pg._config.ssl_key)
+        end)
+
+        it("stores all SSL options together", function()
+            local pg = PostgreSQL.new()
+            pg:connect({
+                host = "db.example.com",
+                port = 5432,
+                database = "myapp",
+                user = "app",
+                password = "secret",
+                ssl = true,
+                ssl_verify = true,
+                ssl_ca = "/etc/ssl/ca.pem",
+                ssl_cert = "/etc/ssl/cert.pem",
+                ssl_key = "/etc/ssl/key.pem",
+            })
+            assert.is_true(pg._config.ssl)
+            assert.is_true(pg._config.ssl_verify)
+            assert.are.equal("/etc/ssl/ca.pem", pg._config.ssl_ca)
+            assert.are.equal("/etc/ssl/cert.pem", pg._config.ssl_cert)
+            assert.are.equal("/etc/ssl/key.pem", pg._config.ssl_key)
+        end)
+    end)
 end)
