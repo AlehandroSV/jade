@@ -308,9 +308,9 @@ describe("MySQL Driver SQL Generation", function()
         end)
 
         it("sets MYSQL_OPT_SSL_MODE env var when ssl enabled", function()
-            -- Skip if FFI not available (setenv requires FFI in LuaJIT)
-            local ok, _ = pcall(require, "ffi")
-            if not ok then pending("FFI not available"); return end
+            -- Only test with FFI available (LuaJIT)
+            local ok, ffi = pcall(require, "ffi")
+            if not ok then return end
 
             local mysql = MySQL.new()
             mysql._config = {
@@ -325,8 +325,8 @@ describe("MySQL Driver SQL Generation", function()
         end)
 
         it("sets VERIFY_IDENTITY when ssl_verify is true", function()
-            local ok, _ = pcall(require, "ffi")
-            if not ok then pending("FFI not available"); return end
+            local ok, ffi = pcall(require, "ffi")
+            if not ok then return end
 
             local mysql = MySQL.new()
             mysql._config = {
@@ -342,8 +342,8 @@ describe("MySQL Driver SQL Generation", function()
         end)
 
         it("sets VERIFY_CA when ssl_verify is false", function()
-            local ok, _ = pcall(require, "ffi")
-            if not ok then pending("FFI not available"); return end
+            local ok, ffi = pcall(require, "ffi")
+            if not ok then return end
 
             local mysql = MySQL.new()
             mysql._config = {
@@ -359,8 +359,8 @@ describe("MySQL Driver SQL Generation", function()
         end)
 
         it("restores env vars after _setSSLEnv", function()
-            local ok, _ = pcall(require, "ffi")
-            if not ok then pending("FFI not available"); return end
+            local ok, ffi = pcall(require, "ffi")
+            if not ok then return end
 
             local mysql = MySQL.new()
             mysql._config = {
