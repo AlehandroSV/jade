@@ -50,6 +50,8 @@ end
 function Query:onlyTrashed()
     self._include_trashed = false
     self._only_trashed = true
+    return self
+end
 
 function Query:where(condition)
     if type(condition) == "table" and condition._raw and not condition.compile then
