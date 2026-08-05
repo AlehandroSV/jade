@@ -126,15 +126,24 @@ function M.setup(entity, options)
     end
 
     function entity:withTrashed()
-        return Query.new(self):withTrashed()
+        local q = Query.new(self)
+        q._include_trashed = true
+        q._only_trashed = false
+        return q
     end
 
     function entity:onlyTrashed()
-        return Query.new(self):onlyTrashed()
+        local q = Query.new(self)
+        q._include_trashed = false
+        q._only_trashed = true
+        return q
     end
 
     function entity:withoutTrashed()
-        return Query.new(self)
+        local q = Query.new(self)
+        q._include_trashed = false
+        q._only_trashed = false
+        return q
     end
 
     function entity:restore(id)
