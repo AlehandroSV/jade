@@ -53,6 +53,7 @@ function MemoryStore:get(key)
         self.ttls[key] = nil
         return nil
     end
+    entry.accessed_at = os.time()
     return entry.value
 end
 
@@ -60,7 +61,7 @@ function MemoryStore:set(key, value, ttl)
     if not self.data[key] and self:size() >= self.max_size then
         self:evict()
     end
-    self.data[key] = { value = value }
+    self.data[key] = { value = value, accessed_at = os.time() }
     if ttl then
         self.ttls[key] = os.time() + ttl
     end
@@ -92,16 +93,15 @@ function MemoryStore:size()
 end
 
 function MemoryStore:evict()
-    local oldest_key, oldest_time
-    for key in pairs(self.data) do
-        local ttl = self.ttls[key] or math.huge
-        if not oldest_time or ttl < oldest_time then
-            oldest_key = key
-            oldest_time = ttl
+    local lru_key, lru_time
+    for key, entry in pairs(self.data) do
+        if not lru_time or entry.accessed_at < lru_time then
+            lru_key = key
+            lru_time = entry.accessed_at
         end
     end
-    if oldest_key then
-        self:delete(oldest_key)
+    if lru_key then
+        self:delete(lru_key)
     end
 end
 
