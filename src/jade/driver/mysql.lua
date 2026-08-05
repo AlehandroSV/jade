@@ -26,7 +26,12 @@ function MySQL:connect(config)
         port = config.port or 3306,
         database = config.database,
         user = config.user or "root",
-        password = config.password or ""
+        password = config.password or "",
+        ssl = config.ssl or false,
+        ssl_verify = config.ssl_verify,
+        ssl_ca = config.ssl_ca,
+        ssl_cert = config.ssl_cert,
+        ssl_key = config.ssl_key,
     }
 
     -- Initialize luasql environment
@@ -47,6 +52,68 @@ function MySQL:connect(config)
     return self
 end
 
+-- Cross-platform setenv implementation
+-- Uses FFI in LuaJIT, falls back to os.execute in standard Lua
+local function setenv(name, value)
+    local ok, ffi = pcall(require, "ffi")
+    if ok and ffi then
+        -- LuaJIT FFI path
+        ffi.cdef[[
+            int setenv(const char *name, const char *value, int overwrite);
+            int unsetenv(const char *name);
+        ]]
+        if value and value ~= "" then
+            ffi.C.setenv(name, value, 1)
+        else
+            ffi.C.unsetenv(name)
+        end
+    else
+        -- Standard Lua: use os.execute (affects subprocess only, but
+        -- MySQL C API may read /proc/self/environ on Linux)
+        if value and value ~= "" then
+            os.execute(string.format("export %s='%s'", name, value:gsub("'", "'\\''")))
+        else
+            os.execute(string.format("unset %s", name))
+        end
+    end
+end
+
+-- Set SSL environment variables for MySQL C API
+-- The MySQL client library reads these automatically before connecting
+function MySQL:_setSSLEnv()
+    if not self._config.ssl then return {} end
+
+    local saved = {}
+    local ssl_vars = {
+        { env = "MYSQL_OPT_SSL_MODE", value = "REQUIRED" },
+        { env = "MYSQL_SSL_CA", value = self._config.ssl_ca },
+        { env = "MYSQL_SSL_CERT", value = self._config.ssl_cert },
+        { env = "MYSQL_SSL_KEY", value = self._config.ssl_key },
+    }
+
+    if self._config.ssl_verify == false then
+        ssl_vars[1].value = "VERIFY_CA"
+    elseif self._config.ssl_verify then
+        ssl_vars[1].value = "VERIFY_IDENTITY"
+    end
+
+    for _, var in ipairs(ssl_vars) do
+        if var.value then
+            saved[var.env] = os.getenv(var.env)
+            setenv(var.env, tostring(var.value))
+        end
+    end
+
+    return saved
+end
+
+-- Restore saved SSL environment variables
+function MySQL:_restoreSSLEnv(saved)
+    for name, value in pairs(saved) do
+        setenv(name, value or "")
+    end
+end
+
 function MySQL:_ensureConnected()
     if self._conn then return end
 
@@ -56,15 +123,25 @@ function MySQL:_ensureConnected()
         self._env = mysql.mysql()
     end
 
-    local conn, err = self._env:connect(
-        self._config.database,
-        self._config.user,
-        self._config.password,
-        self._config.host,
-        self._config.port
-    )
+    -- Set SSL env vars, connect, then restore (wrapped in pcall for safety)
+    local saved_env = self:_setSSLEnv()
+    local success, result = pcall(function()
+        return self._env:connect(
+            self._config.database,
+            self._config.user,
+            self._config.password,
+            self._config.host,
+            self._config.port
+        )
+    end)
+    self:_restoreSSLEnv(saved_env)
+
+    if not success then
+        error("Failed to connect to MySQL: " .. tostring(result))
+    end
+    local conn = result
     if not conn then
-        error("Failed to connect to MySQL: " .. tostring(err))
+        error("Failed to connect to MySQL: nil returned")
     end
     self._conn = conn
     self:setEncryptionKey()
@@ -116,15 +193,25 @@ end
 
 -- Transaction methods
 function MySQL:getConnection()
-    local conn, err = self._env:connect(
-        self._config.database,
-        self._config.user,
-        self._config.password,
-        self._config.host,
-        self._config.port
-    )
+    -- Set SSL env vars, connect, then restore (wrapped in pcall for safety)
+    local saved_env = self:_setSSLEnv()
+    local success, result = pcall(function()
+        return self._env:connect(
+            self._config.database,
+            self._config.user,
+            self._config.password,
+            self._config.host,
+            self._config.port
+        )
+    end)
+    self:_restoreSSLEnv(saved_env)
+
+    if not success then
+        error("Failed to connect to MySQL: " .. tostring(result))
+    end
+    local conn = result
     if not conn then
-        error("Failed to connect to MySQL: " .. tostring(err))
+        error("Failed to connect to MySQL: nil returned")
     end
     -- Set encryption key for new connection
     self:setEncryptionKey(conn)
