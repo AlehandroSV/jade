@@ -239,6 +239,26 @@ function MySQL:rollbackTransaction(conn)
     end
 end
 
+-- Set query timeout (MySQL uses max_execution_time in milliseconds)
+function MySQL:setQueryTimeout(timeout_ms)
+    self:_ensureConnected()
+    local sql = "SET max_execution_time = " .. tostring(timeout_ms)
+    local res, err = self._conn:execute(sql)
+    if not res then
+        error("Failed to set query timeout: " .. tostring(err))
+    end
+end
+
+-- Clear query timeout
+function MySQL:clearQueryTimeout()
+    self:_ensureConnected()
+    local sql = "SET max_execution_time = 0"
+    local res, err = self._conn:execute(sql)
+    if not res then
+        error("Failed to clear query timeout: " .. tostring(err))
+    end
+end
+
 -- Helper to convert ? placeholders to :n style for luasql
 local function convertPlaceholders(sql, bindings)
     if not bindings or #bindings == 0 then
