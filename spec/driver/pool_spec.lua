@@ -196,25 +196,13 @@ describe("Connection Pool", function()
     end)
 
     describe("abandoned connection detection", function()
-        it("recycles connection idle longer than abandoned_timeout", function()
+        it("does not close abandoned connections during normal cleanup", function()
             local driver = mock_driver()
             local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 10 })
 
             local conn = pool:acquire()
             pool.connections[1].last_used = os.time() - 20
 
-            pool:_cleanIdleConnections()
-
-            assert.are.equal(0, #pool.connections)
-            assert.are.equal(0, pool.created)
-            assert.are.equal(0, pool.checked_out)
-        end)
-
-        it("does not recycle connection within abandoned_timeout", function()
-            local driver = mock_driver()
-            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 60 })
-
-            local conn = pool:acquire()
             pool:_cleanIdleConnections()
 
             assert.are.equal(1, #pool.connections)
@@ -222,20 +210,19 @@ describe("Connection Pool", function()
             assert.are.equal(1, pool.checked_out)
         end)
 
-        it("closes abandoned connection via driver", function()
+        it("reclaims abandoned connection when pool is exhausted", function()
             local driver = mock_driver()
-            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 10 })
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 10 })
 
             local conn = pool:acquire()
             pool.connections[1].last_used = os.time() - 20
 
-            pool:_cleanIdleConnections()
-
-            assert.are.equal(1, #driver.connections_closed)
-            assert.are.equal(conn, driver.connections_closed[1])
+            local new_conn = pool:acquire()
+            assert.is_truthy(new_conn)
+            assert.are.equal(1, pool.created)
         end)
 
-        it("recycles multiple abandoned connections", function()
+        it("reclaims only one abandoned connection at a time", function()
             local driver = mock_driver()
             local pool = Pool.new(driver, { min_size = 2, max_size = 2, abandoned_timeout = 10 })
 
@@ -245,31 +232,42 @@ describe("Connection Pool", function()
             pool.connections[1].last_used = os.time() - 20
             pool.connections[2].last_used = os.time() - 20
 
-            pool:_cleanIdleConnections()
-
-            assert.are.equal(0, #pool.connections)
-            assert.are.equal(0, pool.created)
-            assert.are.equal(0, pool.checked_out)
+            local reclaimed = pool:_reclaimOneAbandonedConnection()
+            assert.is_true(reclaimed)
+            assert.are.equal(1, #pool.connections)
+            assert.are.equal(1, pool.created)
+            assert.are.equal(1, pool.checked_out)
         end)
 
-        it("respects custom abandoned_timeout value", function()
+        it("does not reclaim connection within abandoned_timeout", function()
             local driver = mock_driver()
-            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 30 })
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 60 })
 
             local conn = pool:acquire()
 
-            pool.connections[1].last_used = os.time() - 25
-            pool:_cleanIdleConnections()
-            assert.are.equal(1, #pool.connections)
-
-            pool.connections[1].last_used = os.time() - 35
-            pool:_cleanIdleConnections()
-            assert.are.equal(0, #pool.connections)
+            assert.has_error(function()
+                pool:acquire()
+            end)
         end)
 
-        it("logs warning when recycling abandoned connection", function()
+        it("does not close legitimate long-running connection", function()
             local driver = mock_driver()
-            local pool = Pool.new(driver, { min_size = 1, abandoned_timeout = 10 })
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 60 })
+
+            local conn = pool:acquire()
+            pool.connections[1].last_used = os.time() - 30
+
+            assert.has_error(function()
+                pool:acquire()
+            end)
+
+            assert.are.equal(1, #pool.connections)
+            assert.is_true(pool.connections[1].in_use)
+        end)
+
+        it("logs warning when reclaiming abandoned connection", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 10 })
 
             pool:acquire()
             pool.connections[1].last_used = os.time() - 20
@@ -280,13 +278,35 @@ describe("Connection Pool", function()
                 table.insert(captured, msg)
             end
 
-            pool:_cleanIdleConnections()
+            pool:acquire()
 
             io.write = original_write
 
-            assert.are.equal(1, #captured)
-            assert.is_truthy(string.find(captured[1], "%[WARN%]"))
-            assert.is_truthy(string.find(captured[1], "recycled abandoned connection"))
+            assert.is_truthy(#captured >= 1)
+            local found = false
+            for _, msg in ipairs(captured) do
+                if string.find(msg, "%[WARN%]") and string.find(msg, "recycled abandoned connection") then
+                    found = true
+                end
+            end
+            assert.is_true(found)
+        end)
+
+        it("respects custom abandoned_timeout value", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 30 })
+
+            local conn = pool:acquire()
+            pool.connections[1].last_used = os.time() - 25
+
+            assert.has_error(function()
+                pool:acquire()
+            end)
+
+            pool.connections[1].last_used = os.time() - 35
+
+            local new_conn = pool:acquire()
+            assert.is_truthy(new_conn)
         end)
     end)
 
