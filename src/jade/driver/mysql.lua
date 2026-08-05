@@ -26,7 +26,12 @@ function MySQL:connect(config)
         port = config.port or 3306,
         database = config.database,
         user = config.user or "root",
-        password = config.password or ""
+        password = config.password or "",
+        ssl = config.ssl or false,
+        ssl_verify = config.ssl_verify,
+        ssl_ca = config.ssl_ca,
+        ssl_cert = config.ssl_cert,
+        ssl_key = config.ssl_key,
     }
 
     -- Initialize luasql environment
@@ -47,6 +52,46 @@ function MySQL:connect(config)
     return self
 end
 
+-- Set SSL environment variables for MySQL C API
+-- The MySQL client library reads these automatically before connecting
+function MySQL:_setSSLEnv()
+    if not self._config.ssl then return {} end
+
+    local saved = {}
+    local ssl_vars = {
+        { env = "MYSQL_OPT_SSL_MODE", value = "REQUIRED" },
+        { env = "MYSQL_SSL_CA", value = self._config.ssl_ca },
+        { env = "MYSQL_SSL_CERT", value = self._config.ssl_cert },
+        { env = "MYSQL_SSL_KEY", value = self._config.ssl_key },
+    }
+
+    if self._config.ssl_verify == false then
+        ssl_vars[1].value = "VERIFY_CA"
+    elseif self._config.ssl_verify then
+        ssl_vars[1].value = "VERIFY_IDENTITY"
+    end
+
+    for _, var in ipairs(ssl_vars) do
+        if var.value then
+            saved[var.env] = os.getenv(var.env)
+            os.setenv(var.env, tostring(var.value))
+        end
+    end
+
+    return saved
+end
+
+-- Restore saved SSL environment variables
+function MySQL:_restoreSSLEnv(saved)
+    for name, value in pairs(saved) do
+        if value then
+            os.setenv(name, value)
+        else
+            os.setenv(name, "")
+        end
+    end
+end
+
 function MySQL:_ensureConnected()
     if self._conn then return end
 
@@ -56,6 +101,8 @@ function MySQL:_ensureConnected()
         self._env = mysql.mysql()
     end
 
+    -- Set SSL env vars, connect, then restore
+    local saved_env = self:_setSSLEnv()
     local conn, err = self._env:connect(
         self._config.database,
         self._config.user,
@@ -63,6 +110,8 @@ function MySQL:_ensureConnected()
         self._config.host,
         self._config.port
     )
+    self:_restoreSSLEnv(saved_env)
+
     if not conn then
         error("Failed to connect to MySQL: " .. tostring(err))
     end
@@ -116,6 +165,8 @@ end
 
 -- Transaction methods
 function MySQL:getConnection()
+    -- Set SSL env vars, connect, then restore
+    local saved_env = self:_setSSLEnv()
     local conn, err = self._env:connect(
         self._config.database,
         self._config.user,
@@ -123,6 +174,8 @@ function MySQL:getConnection()
         self._config.host,
         self._config.port
     )
+    self:_restoreSSLEnv(saved_env)
+
     if not conn then
         error("Failed to connect to MySQL: " .. tostring(err))
     end
