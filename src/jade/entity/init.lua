@@ -569,7 +569,7 @@ function Entity:update(id_or_options, data)
             local enc_data, encrypt_cols = Encryption.prepareUpdate(update_data, self._table, self._columns, self._driver)
             self._encrypt_cols = encrypt_cols
 
-            local sql, bindings = self._driver:generateUpdate(self._table, enc_data, where)
+            local sql, bindings = self._driver:generateUpdate(self._table, enc_data, where, self)
             local result = self._driver:execute(sql, bindings)
             local row = result[1] or result
 

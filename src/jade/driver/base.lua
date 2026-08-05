@@ -41,7 +41,7 @@ function Driver:generateInsert(table_name, data, entity)
     error("Driver:generateInsert() not implemented")
 end
 
-function Driver:generateUpdate(table_name, data, where)
+function Driver:generateUpdate(table_name, data, where, entity)
     error("Driver:generateUpdate() not implemented")
 end
 
