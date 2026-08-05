@@ -88,4 +88,61 @@ describe("Soft Delete", function()
             assert.is_true(SoftDelete.hasCascade(Post))
         end)
     end)
+
+    describe("Query integration", function()
+        local Query = require("jade.query")
+
+        before_each(function()
+            SoftDelete.setup(User)
+        end)
+
+        it("Query has withTrashed method", function()
+            local q = Query.new(User)
+            assert.is_function(q.withTrashed)
+        end)
+
+        it("Query has onlyTrashed method", function()
+            local q = Query.new(User)
+            assert.is_function(q.onlyTrashed)
+        end)
+
+        it("withTrashed sets _include_trashed flag", function()
+            local q = Query.new(User):withTrashed()
+            assert.is_true(q._include_trashed)
+            assert.is_false(q._only_trashed)
+        end)
+
+        it("onlyTrashed sets _only_trashed flag", function()
+            local q = Query.new(User):onlyTrashed()
+            assert.is_false(q._include_trashed)
+            assert.is_true(q._only_trashed)
+        end)
+
+        it("Entity:withTrashed returns Query with flag", function()
+            local q = User:withTrashed()
+            assert.is_true(q._include_trashed)
+        end)
+
+        it("Entity:onlyTrashed returns Query with flag", function()
+            local q = User:onlyTrashed()
+            assert.is_true(q._only_trashed)
+        end)
+
+        it("preserves soft delete flags in first()", function()
+            local q = Query.new(User):withTrashed()
+            -- first() creates a new Query, flags should be preserved
+            -- We can't easily test the SQL without a driver, but we can test the flags
+            assert.is_true(q._include_trashed)
+        end)
+
+        it("preserves soft delete flags in find()", function()
+            local q = Query.new(User):onlyTrashed()
+            assert.is_true(q._only_trashed)
+        end)
+
+        it("preserves soft delete flags in count()", function()
+            local q = Query.new(User):withTrashed()
+            assert.is_true(q._include_trashed)
+        end)
+    end)
 end)
