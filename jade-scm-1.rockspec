@@ -93,6 +93,7 @@ build = {
         ["jade.errors.base"] = "src/jade/errors/base.lua",
         ["jade.errors.connection"] = "src/jade/errors/connection.lua",
         ["jade.errors.query"] = "src/jade/errors/query.lua",
+        ["jade.errors.timeout"] = "src/jade/errors/timeout.lua",
         ["jade.errors.migration"] = "src/jade/errors/migration.lua",
         ["jade.errors.introspection"] = "src/jade/errors/introspection.lua",
         ["jade.errors.integrity"] = "src/jade/errors/integrity.lua",
