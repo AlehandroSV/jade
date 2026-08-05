@@ -571,4 +571,39 @@ function PostgreSQL:generateDelete(table_name, where)
     return sql, bindings
 end
 
+--- Execute a function within a database transaction.
+-- Automatically commits on success, rolls back on error.
+-- Uses the shared connection to ensure all operations are within the same transaction.
+-- PostgreSQL supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
+-- @param fn function The function to execute within the transaction
+-- @return boolean true if the transaction was committed successfully
+function PostgreSQL:transaction(fn)
+    self:_ensureConnected()
+
+    local conn = self._conn
+    local res, err = conn:query("BEGIN")
+    if not res then
+        error("Failed to begin transaction: " .. tostring(err))
+    end
+
+    local ok, fn_err = pcall(fn)
+
+    if ok then
+        local commit_res, commit_err = conn:query("COMMIT")
+        if not commit_res then
+            error("Failed to commit transaction: " .. tostring(commit_err))
+        end
+        return true
+    else
+        local rollback_res, rollback_err = conn:query("ROLLBACK")
+        if not rollback_res then
+            -- Connection may be in undefined state after failed rollback
+            self._conn = nil
+            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+        end
+        -- Re-raise original error preserving context
+        error(fn_err, 2)
+    end
+end
+
 return PostgreSQL
