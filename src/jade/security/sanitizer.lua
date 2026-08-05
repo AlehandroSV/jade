@@ -8,7 +8,20 @@ local DANGEROUS_KEYWORDS = {
     "COMMIT", "ROLLBACK", "SAVEPOINT", "SET", "RESET",
 }
 
--- Check if string contains SQL injection attempts
+--- Check if string contains SQL injection attempts.
+-- WARNING: This function uses regex/keyword-based detection which is inherently
+-- incomplete and can be bypassed by experienced attackers (e.g., via CHAR(),
+-- hex encoding, unicode, comment obfuscation, etc.).
+--
+-- The primary protection against SQL injection should be:
+-- 1. Prepared statements/parameterized queries for ALL values
+-- 2. Whitelist validation for identifiers (column/table names)
+--
+-- This function is provided as a convenience for additional validation layers,
+-- but should NOT be relied upon as the sole protection against SQL injection.
+--
+-- @param input string The input to check
+-- @return boolean, string true if suspicious pattern found, reason string
 function M.detectSQLInjection(input)
     if type(input) ~= "string" then
         return false
@@ -110,26 +123,33 @@ function M.validateType(value, expected_type)
     return type(value) == lua_type
 end
 
--- Escape SQL identifier (table/column name)
+-- Escape SQL identifier (table/column name).
+-- Uses strict whitelist validation to ensure only valid identifiers are allowed.
+-- The pattern ^[%a_][%w_]*$ ensures identifiers contain only letters, digits, and
+-- underscores, starting with a letter or underscore. This inherently prevents
+-- SQL injection without needing regex-based detection.
+-- @param identifier string The identifier to validate
+-- @return string The validated identifier
 function M.escapeIdentifier(identifier)
     if type(identifier) ~= "string" then
         error("Identifier must be a string")
     end
 
-    -- Check for valid identifier characters
+    -- Strict whitelist: only alphanumeric characters and underscores
+    -- Must start with a letter or underscore
     if not identifier:match("^[%a_][%w_]*$") then
         error("Invalid identifier: " .. identifier)
-    end
-
-    -- Check against dangerous patterns
-    if M.detectSQLInjection(identifier) then
-        error("Dangerous identifier rejected: " .. identifier)
     end
 
     return identifier
 end
 
--- Escape string value for SQL (with quotes)
+-- Escape string value for SQL (with quotes).
+-- NOTE: This function should only be used as a last resort for raw SQL construction.
+-- The recommended approach is to use prepared statements (bindings) for ALL values.
+-- SQL injection detection has been removed because it gives a false sense of security
+-- and can be bypassed by experienced attackers.
+-- @see driver:execute(sql, bindings) for the safe alternative
 function M.escapeString(value)
     if value == nil then
         return "NULL"
@@ -139,13 +159,7 @@ function M.escapeString(value)
         return tostring(value)
     end
 
-    -- Check for SQL injection
-    local is_dangerous, reason = M.detectSQLInjection(value)
-    if is_dangerous then
-        error("SQL injection detected: " .. reason)
-    end
-
-    -- Escape single quotes
+    -- Escape single quotes (standard SQL escaping)
     local escaped = value:gsub("'", "''")
 
     return "'" .. escaped .. "'"
