@@ -76,6 +76,9 @@ function Pool:_reclaimOneAbandonedConnection()
 
     if oldest_idx then
         local entry = self.connections[oldest_idx]
+        if self:_isConnectionAlive(entry.connection) then
+            return false
+        end
         pcall(function()
             if self.driver.closeConnection then
                 self.driver:closeConnection(entry.connection)

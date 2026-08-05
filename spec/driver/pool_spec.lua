@@ -7,6 +7,7 @@ describe("Connection Pool", function()
             connections_created = {},
             connections_closed = {},
             execute_calls = {},
+            dead_connections = {},
         }
 
         function driver:getConnection()
@@ -17,6 +18,9 @@ describe("Connection Pool", function()
         end
 
         function driver:executeWithConnection(conn, sql, bindings)
+            if driver.dead_connections[conn.id] then
+                return nil
+            end
             table.insert(driver.execute_calls, { conn = conn, sql = sql, bindings = bindings })
             return { rows = {}, affected = 1 }
         end
@@ -27,6 +31,10 @@ describe("Connection Pool", function()
 
         function driver:disconnect(conn)
             table.insert(driver.connections_closed, conn)
+        end
+
+        function driver:mark_dead(conn)
+            driver.dead_connections[conn.id] = true
         end
 
         return driver
@@ -216,6 +224,7 @@ describe("Connection Pool", function()
 
             local conn = pool:acquire()
             pool.connections[1].last_used = os.time() - 20
+            driver:mark_dead(pool.connections[1].connection)
 
             local new_conn = pool:acquire()
             assert.is_truthy(new_conn)
@@ -231,6 +240,8 @@ describe("Connection Pool", function()
 
             pool.connections[1].last_used = os.time() - 20
             pool.connections[2].last_used = os.time() - 20
+            driver:mark_dead(pool.connections[1].connection)
+            driver:mark_dead(pool.connections[2].connection)
 
             local reclaimed = pool:_reclaimOneAbandonedConnection()
             assert.is_true(reclaimed)
@@ -252,10 +263,10 @@ describe("Connection Pool", function()
 
         it("does not close legitimate long-running connection", function()
             local driver = mock_driver()
-            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 60 })
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 10 })
 
             local conn = pool:acquire()
-            pool.connections[1].last_used = os.time() - 30
+            pool.connections[1].last_used = os.time() - 20
 
             assert.has_error(function()
                 pool:acquire()
@@ -271,6 +282,7 @@ describe("Connection Pool", function()
 
             pool:acquire()
             pool.connections[1].last_used = os.time() - 20
+            driver:mark_dead(pool.connections[1].connection)
 
             local captured = {}
             local original_write = io.write
@@ -304,6 +316,7 @@ describe("Connection Pool", function()
             end)
 
             pool.connections[1].last_used = os.time() - 35
+            driver:mark_dead(pool.connections[1].connection)
 
             local new_conn = pool:acquire()
             assert.is_truthy(new_conn)
