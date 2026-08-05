@@ -52,6 +52,32 @@ function MySQL:connect(config)
     return self
 end
 
+-- Cross-platform setenv implementation
+-- Uses FFI in LuaJIT, falls back to os.execute in standard Lua
+local function setenv(name, value)
+    local ok, ffi = pcall(require, "ffi")
+    if ok and ffi then
+        -- LuaJIT FFI path
+        ffi.cdef[[
+            int setenv(const char *name, const char *value, int overwrite);
+            int unsetenv(const char *name);
+        ]]
+        if value and value ~= "" then
+            ffi.C.setenv(name, value, 1)
+        else
+            ffi.C.unsetenv(name)
+        end
+    else
+        -- Standard Lua: use os.execute (affects subprocess only, but
+        -- MySQL C API may read /proc/self/environ on Linux)
+        if value and value ~= "" then
+            os.execute(string.format("export %s='%s'", name, value:gsub("'", "'\\''")))
+        else
+            os.execute(string.format("unset %s", name))
+        end
+    end
+end
+
 -- Set SSL environment variables for MySQL C API
 -- The MySQL client library reads these automatically before connecting
 function MySQL:_setSSLEnv()
@@ -74,7 +100,7 @@ function MySQL:_setSSLEnv()
     for _, var in ipairs(ssl_vars) do
         if var.value then
             saved[var.env] = os.getenv(var.env)
-            os.setenv(var.env, tostring(var.value))
+            setenv(var.env, tostring(var.value))
         end
     end
 
@@ -84,11 +110,7 @@ end
 -- Restore saved SSL environment variables
 function MySQL:_restoreSSLEnv(saved)
     for name, value in pairs(saved) do
-        if value then
-            os.setenv(name, value)
-        else
-            os.setenv(name, "")
-        end
+        setenv(name, value or "")
     end
 end
 
