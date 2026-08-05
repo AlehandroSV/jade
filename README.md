@@ -124,24 +124,12 @@ jade.configure({ database = { driver = "mariadb", ... } })
 jade.configure({ database = { driver = "sqlite", database = "app.db" } })
 ```
 
-### SSL/TLS (PostgreSQL)
+### SSL/TLS
 
-Jade supports SSL/TLS connections for PostgreSQL to secure data in transit:
+Jade supports SSL/TLS connections for PostgreSQL, MySQL, and MariaDB:
 
 ```lua
--- Basic SSL
-jade.configure({
-    database = {
-        driver = "postgresql",
-        host = "db.example.com",
-        database = "myapp",
-        user = "app",
-        password = "secret",
-        ssl = true,
-    }
-})
-
--- SSL with certificate verification
+-- PostgreSQL SSL
 jade.configure({
     database = {
         driver = "postgresql",
@@ -159,6 +147,22 @@ jade.configure({
 jade.configure({
     database = {
         driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+        ssl_cert = "/path/to/client-cert.pem",
+        ssl_key = "/path/to/client-key.pem",
+    }
+})
+
+-- MySQL/MariaDB SSL
+jade.configure({
+    database = {
+        driver = "mysql",  -- or "mariadb"
         host = "db.example.com",
         database = "myapp",
         user = "app",
