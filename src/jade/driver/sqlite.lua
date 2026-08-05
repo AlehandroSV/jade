@@ -52,16 +52,24 @@ function SQLite:_ensureConnected()
         self._env = sqlite3.sqlite3()
     end
 
-    local conn, err = self._env:connect(self._config.database)
-    if not conn then
-        error("Failed to connect to SQLite: " .. tostring(err))
+    local Retry = require("jade.util.retry")
+    local retry_config = Retry.getConfig(self._config)
+
+    local function connect()
+        local conn, err = self._env:connect(self._config.database)
+        if not conn then
+            error("Failed to connect to SQLite: " .. tostring(err))
+        end
+
+        -- Enable WAL mode for better concurrency
+        conn:execute("PRAGMA journal_mode=WAL")
+        -- Enable foreign keys
+        conn:execute("PRAGMA foreign_keys=ON")
+
+        return conn
     end
 
-    -- Enable WAL mode for better concurrency
-    conn:execute("PRAGMA journal_mode=WAL")
-    -- Enable foreign keys
-    conn:execute("PRAGMA foreign_keys=ON")
-
+    local conn = Retry.execute(connect, retry_config, "SQLite connection")
     self._conn = conn
 end
 
