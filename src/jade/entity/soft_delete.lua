@@ -10,7 +10,7 @@ function M.setup(entity, options)
 
     -- Add deleted_at column to entity
     local Timestamp = require("jade.types.timestamp")
-    entity._columns[column] = Timestamp():nullable()
+    entity._columns[column] = Timestamp()
     entity._columns[column]._name = column
     entity._columns[column]._table = entity._table
 
