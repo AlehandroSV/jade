@@ -133,6 +133,10 @@ function M.setup(entity, options)
         return Query.new(self):onlyTrashed()
     end
 
+    function entity:withoutTrashed()
+        return Query.new(self)
+    end
+
     function entity:restore(id)
         local data = {}
         data[column] = nil
