@@ -106,6 +106,26 @@ function PostgreSQL:setEncryptionKey(conn)
     end
 end
 
+-- Set query timeout (PostgreSQL uses statement_timeout in milliseconds)
+function PostgreSQL:setQueryTimeout(timeout_ms)
+    self:_ensureConnected()
+    local sql = "SET statement_timeout = " .. tostring(timeout_ms)
+    local res, err = self._conn:query(sql)
+    if not res then
+        error("Failed to set query timeout: " .. tostring(err))
+    end
+end
+
+-- Clear query timeout
+function PostgreSQL:clearQueryTimeout()
+    self:_ensureConnected()
+    local sql = "SET statement_timeout = 0"
+    local res, err = self._conn:query(sql)
+    if not res then
+        error("Failed to clear query timeout: " .. tostring(err))
+    end
+end
+
 -- Transaction methods
 function PostgreSQL:getConnection()
     local pg = pgmoon.new(self._config)
