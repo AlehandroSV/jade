@@ -122,6 +122,26 @@ function SQLite:rollbackTransaction(conn)
     end
 end
 
+-- Set query timeout (SQLite uses busy_timeout in milliseconds)
+function SQLite:setQueryTimeout(timeout_ms)
+    self:_ensureConnected()
+    local sql = "PRAGMA busy_timeout = " .. tostring(timeout_ms)
+    local res, err = self._conn:execute(sql)
+    if not res then
+        error("Failed to set query timeout: " .. tostring(err))
+    end
+end
+
+-- Clear query timeout
+function SQLite:clearQueryTimeout()
+    self:_ensureConnected()
+    local sql = "PRAGMA busy_timeout = 0"
+    local res, err = self._conn:execute(sql)
+    if not res then
+        error("Failed to clear query timeout: " .. tostring(err))
+    end
+end
+
 -- Helper to convert ? placeholders to :n style for luasql
 local function convertPlaceholders(sql, bindings)
     if not bindings or #bindings == 0 then

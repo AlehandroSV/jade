@@ -24,9 +24,19 @@ function Query.new(entity)
         _distinct = false,
         _cache_ttl = nil,
         _cache_key = nil,
+        _timeout = nil,
         _include_trashed = false,
         _only_trashed = false,
     }, Query)
+end
+
+-- Set query timeout in milliseconds
+function Query:timeout(ms)
+    if type(ms) ~= "number" or ms <= 0 then
+        error("Timeout must be a positive number in milliseconds")
+    end
+    self._timeout = ms
+    return self
 end
 
 -- Include soft-deleted records in results
@@ -179,7 +189,20 @@ function Query:get()
 
     local sql, bindings = self:toSQL()
     local driver = self._entity._driver
+
+    -- Apply timeout if set (per-query or global)
+    local timeout_ms = self:_resolveTimeout()
+    if timeout_ms then
+        driver:setQueryTimeout(timeout_ms)
+    end
+
     local raw = driver:execute(sql, bindings)
+
+    -- Reset timeout after execution
+    if timeout_ms then
+        driver:clearQueryTimeout()
+    end
+
     local instances = {}
 
     -- Handle custom encryption decryption at Lua level
@@ -207,6 +230,21 @@ function Query:get()
     end
 
     return instances
+end
+
+-- Resolve timeout: per-query takes priority over global config
+function Query:_resolveTimeout()
+    if self._timeout then
+        return self._timeout
+    end
+    local ok, config = pcall(require, "jade.config")
+    if ok then
+        local cfg = config.get()
+        if cfg and cfg.query_timeout then
+            return cfg.query_timeout
+        end
+    end
+    return nil
 end
 
 function Query:_eagerLoad(instances)
@@ -431,6 +469,7 @@ function Query:first()
     q._distinct = self._distinct
     q._limit = 1
     q._offset = self._offset
+    q._timeout = self._timeout
     q._include_trashed = self._include_trashed
     q._only_trashed = self._only_trashed
     local results = q:get()
@@ -449,6 +488,7 @@ function Query:find(id)
     q._distinct = self._distinct
     q._limit = 1
     q._offset = self._offset
+    q._timeout = self._timeout
     q._include_trashed = self._include_trashed
     q._only_trashed = self._only_trashed
     local results = q:get()
@@ -467,6 +507,7 @@ function Query:count()
     q._distinct = self._distinct
     q._limit = self._limit
     q._offset = self._offset
+    q._timeout = self._timeout
     q._include_trashed = self._include_trashed
     q._only_trashed = self._only_trashed
     local sql, bindings = q:toSQL()
