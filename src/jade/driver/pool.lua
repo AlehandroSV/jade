@@ -5,6 +5,7 @@ function Pool.new(driver, options)
     options = options or {}
     local pool = setmetatable({
         driver = driver,
+        abandoned_timeout = options.abandoned_timeout or 60,
         connections = {},
         max_size = options.max_size or 10,
         min_size = options.min_size or 2,
@@ -44,7 +45,6 @@ function Pool:_cleanIdleConnections()
     while i <= #self.connections do
         local entry = self.connections[i]
         if not entry.in_use and (now - entry.last_used) > self.idle_timeout then
-            -- Connection is idle too long, close it
             pcall(function()
                 if self.driver.closeConnection then
                     self.driver:closeConnection(entry.connection)
@@ -60,21 +60,53 @@ function Pool:_cleanIdleConnections()
     end
 end
 
+function Pool:_reclaimOneAbandonedConnection()
+    local now = os.time()
+    local oldest_idx = nil
+    local oldest_time = now
+
+    for i, entry in ipairs(self.connections) do
+        if entry.in_use and (now - entry.last_used) > self.abandoned_timeout then
+            if entry.last_used < oldest_time then
+                oldest_time = entry.last_used
+                oldest_idx = i
+            end
+        end
+    end
+
+    if oldest_idx then
+        local entry = self.connections[oldest_idx]
+        if self:_isConnectionAlive(entry.connection) then
+            return false
+        end
+        pcall(function()
+            if self.driver.closeConnection then
+                self.driver:closeConnection(entry.connection)
+            else
+                self.driver:disconnect(entry.connection)
+            end
+        end)
+        table.remove(self.connections, oldest_idx)
+        self.created = self.created - 1
+        self.checked_out = self.checked_out - 1
+        io.write(string.format('[WARN] Pool: recycled abandoned connection (idle %ds > %ds timeout)\n', now - entry.last_used, self.abandoned_timeout))
+        return true
+    end
+
+    return false
+end
+
 function Pool:acquire()
-    -- Clean idle connections first
     self:_cleanIdleConnections()
 
-    -- Try to get an idle connection with health check
     for i, conn in ipairs(self.connections) do
         if not conn.in_use then
-            -- Check if connection is still alive
             if self:_isConnectionAlive(conn.connection) then
                 conn.in_use = true
                 conn.last_used = os.time()
                 self.checked_out = self.checked_out + 1
                 return conn.connection
             else
-                -- Connection is dead, remove it
                 pcall(function()
                     if self.driver.closeConnection then
                         self.driver:closeConnection(conn.connection)
@@ -88,7 +120,6 @@ function Pool:acquire()
         end
     end
 
-    -- Create new connection if under max
     if self.created < self.max_size then
         local ok, conn = pcall(function() return self.driver:getConnection() end)
         if ok and conn then
@@ -104,6 +135,10 @@ function Pool:acquire()
         end
     end
 
+    if self:_reclaimOneAbandonedConnection() then
+        return self:acquire()
+    end
+
     error("Connection pool exhausted (max: " .. self.max_size .. ")")
 end
 
@@ -116,6 +151,16 @@ function Pool:release(conn)
             return
         end
     end
+end
+
+function Pool:withConnection(fn)
+    local conn = self:acquire()
+    local ok, result = pcall(fn, conn)
+    self:release(conn)
+    if not ok then
+        error(result)
+    end
+    return result
 end
 
 function Pool:close()

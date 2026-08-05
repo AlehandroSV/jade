@@ -156,6 +156,7 @@ local test_files = {
     "driver/mysql_spec.lua",
     "driver/sqlite_spec.lua",
     "driver/mariadb_spec.lua",
+    "driver/pool_spec.lua",
     "migration/tracker_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
