@@ -123,19 +123,25 @@ function MySQL:_ensureConnected()
         self._env = mysql.mysql()
     end
 
-    -- Set SSL env vars, connect, then restore
+    -- Set SSL env vars, connect, then restore (wrapped in pcall for safety)
     local saved_env = self:_setSSLEnv()
-    local conn, err = self._env:connect(
-        self._config.database,
-        self._config.user,
-        self._config.password,
-        self._config.host,
-        self._config.port
-    )
+    local success, result = pcall(function()
+        return self._env:connect(
+            self._config.database,
+            self._config.user,
+            self._config.password,
+            self._config.host,
+            self._config.port
+        )
+    end)
     self:_restoreSSLEnv(saved_env)
 
+    if not success then
+        error("Failed to connect to MySQL: " .. tostring(result))
+    end
+    local conn = result
     if not conn then
-        error("Failed to connect to MySQL: " .. tostring(err))
+        error("Failed to connect to MySQL: nil returned")
     end
     self._conn = conn
     self:setEncryptionKey()
@@ -187,19 +193,25 @@ end
 
 -- Transaction methods
 function MySQL:getConnection()
-    -- Set SSL env vars, connect, then restore
+    -- Set SSL env vars, connect, then restore (wrapped in pcall for safety)
     local saved_env = self:_setSSLEnv()
-    local conn, err = self._env:connect(
-        self._config.database,
-        self._config.user,
-        self._config.password,
-        self._config.host,
-        self._config.port
-    )
+    local success, result = pcall(function()
+        return self._env:connect(
+            self._config.database,
+            self._config.user,
+            self._config.password,
+            self._config.host,
+            self._config.port
+        )
+    end)
     self:_restoreSSLEnv(saved_env)
 
+    if not success then
+        error("Failed to connect to MySQL: " .. tostring(result))
+    end
+    local conn = result
     if not conn then
-        error("Failed to connect to MySQL: " .. tostring(err))
+        error("Failed to connect to MySQL: nil returned")
     end
     -- Set encryption key for new connection
     self:setEncryptionKey(conn)
