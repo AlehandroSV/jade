@@ -52,6 +52,11 @@ function Entity.new(table_name, columns, options)
         end
     end
 
+    -- Per-entity encryption configuration
+    if type(options.encryption) == "table" and next(options.encryption) then
+        Encryption.setEntityConfig(table_name, options.encryption)
+    end
+
     -- Setup validations and callbacks
     Validations.setup(model)
     Callbacks.setup(model)
