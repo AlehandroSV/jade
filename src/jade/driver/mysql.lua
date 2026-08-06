@@ -126,9 +126,11 @@ function MySQL:_ensureConnected()
     local Retry = require("jade.util.retry")
     local retry_config = Retry.getConfig(self._config)
 
+    -- Save/restore SSL env vars ONCE across all retry attempts (not per-attempt)
+    -- to avoid thrashing global MYSQL_* environment variables between retries.
+    local saved_env = self:_setSSLEnv()
+
     local function connect()
-        -- Set SSL env vars, connect, then restore
-        local saved_env = self:_setSSLEnv()
         local success, result = pcall(function()
             return self._env:connect(
                 self._config.database,
@@ -138,6 +140,7 @@ function MySQL:_ensureConnected()
                 self._config.port
             )
         end)
+        -- Restore SSL env vars on any exit (success or error) within this attempt
         self:_restoreSSLEnv(saved_env)
 
         if not success then
@@ -151,6 +154,8 @@ function MySQL:_ensureConnected()
     end
 
     local conn = Retry.execute(connect, retry_config, "MySQL connection")
+    -- Final restore ensures clean state even if Retry.execute propagates an error
+    self:_restoreSSLEnv(saved_env)
     self._conn = conn
     self:setEncryptionKey()
 end
