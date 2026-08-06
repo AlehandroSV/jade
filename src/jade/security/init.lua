@@ -31,13 +31,23 @@ end
 -- Validate input data for entity create/update
 -- data: the input data table
 -- columns: entity column definitions
+--
+-- Security approach:
+-- - Column names validated via whitelist (validator.validateColumnName)
+-- - Values are passed via prepared statements (bindings) - no SQL injection possible
+-- - Type validation ensures correct data types
+-- - String length validation prevents buffer overflow attacks
+--
+-- NOTE: SQL injection detection via regex has been removed from value validation.
+-- The real protection comes from using prepared statements (bindings) for ALL values,
+-- not from regex-based detection which can be bypassed.
 function M.validateInput(data, columns)
     if not data or not columns then
         return true
     end
 
     for key, value in pairs(data) do
-        -- Validate column name
+        -- Validate column name (whitelist approach - inherently safe)
         M.validator.validateColumnName(key)
 
         -- Find column definition
@@ -51,14 +61,6 @@ function M.validateInput(data, columns)
             -- Validate string length
             if type(value) == "string" and col_def.length then
                 M.validator.validateStringLength(value, col_def.length)
-            end
-
-            -- Check for SQL injection in string values
-            if type(value) == "string" then
-                local is_dangerous, reason = M.sanitizer.detectSQLInjection(value)
-                if is_dangerous then
-                    error("SQL injection detected in '" .. key .. "': " .. reason)
-                end
             end
         end
     end

@@ -26,7 +26,12 @@ function MySQL:connect(config)
         port = config.port or 3306,
         database = config.database,
         user = config.user or "root",
-        password = config.password or ""
+        password = config.password or "",
+        ssl = config.ssl or false,
+        ssl_verify = config.ssl_verify,
+        ssl_ca = config.ssl_ca,
+        ssl_cert = config.ssl_cert,
+        ssl_key = config.ssl_key,
     }
 
     -- Initialize luasql environment
@@ -47,6 +52,68 @@ function MySQL:connect(config)
     return self
 end
 
+-- Cross-platform setenv implementation
+-- Uses FFI in LuaJIT, falls back to os.execute in standard Lua
+local function setenv(name, value)
+    local ok, ffi = pcall(require, "ffi")
+    if ok and ffi then
+        -- LuaJIT FFI path
+        ffi.cdef[[
+            int setenv(const char *name, const char *value, int overwrite);
+            int unsetenv(const char *name);
+        ]]
+        if value and value ~= "" then
+            ffi.C.setenv(name, value, 1)
+        else
+            ffi.C.unsetenv(name)
+        end
+    else
+        -- Standard Lua: use os.execute (affects subprocess only, but
+        -- MySQL C API may read /proc/self/environ on Linux)
+        if value and value ~= "" then
+            os.execute(string.format("export %s='%s'", name, value:gsub("'", "'\\''")))
+        else
+            os.execute(string.format("unset %s", name))
+        end
+    end
+end
+
+-- Set SSL environment variables for MySQL C API
+-- The MySQL client library reads these automatically before connecting
+function MySQL:_setSSLEnv()
+    if not self._config.ssl then return {} end
+
+    local saved = {}
+    local ssl_vars = {
+        { env = "MYSQL_OPT_SSL_MODE", value = "REQUIRED" },
+        { env = "MYSQL_SSL_CA", value = self._config.ssl_ca },
+        { env = "MYSQL_SSL_CERT", value = self._config.ssl_cert },
+        { env = "MYSQL_SSL_KEY", value = self._config.ssl_key },
+    }
+
+    if self._config.ssl_verify == false then
+        ssl_vars[1].value = "VERIFY_CA"
+    elseif self._config.ssl_verify then
+        ssl_vars[1].value = "VERIFY_IDENTITY"
+    end
+
+    for _, var in ipairs(ssl_vars) do
+        if var.value then
+            saved[var.env] = os.getenv(var.env)
+            setenv(var.env, tostring(var.value))
+        end
+    end
+
+    return saved
+end
+
+-- Restore saved SSL environment variables
+function MySQL:_restoreSSLEnv(saved)
+    for name, value in pairs(saved) do
+        setenv(name, value or "")
+    end
+end
+
 function MySQL:_ensureConnected()
     if self._conn then return end
 
@@ -56,17 +123,41 @@ function MySQL:_ensureConnected()
         self._env = mysql.mysql()
     end
 
-    local conn, err = self._env:connect(
-        self._config.database,
-        self._config.user,
-        self._config.password,
-        self._config.host,
-        self._config.port
-    )
-    if not conn then
-        error("Failed to connect to MySQL: " .. tostring(err))
+    local Retry = require("jade.util.retry")
+    local retry_config = Retry.getConfig(self._config)
+
+    -- Save/restore SSL env vars ONCE across all retry attempts (not per-attempt)
+    -- to avoid thrashing global MYSQL_* environment variables between retries.
+    local saved_env = self:_setSSLEnv()
+
+    local function connect()
+        local success, result = pcall(function()
+            return self._env:connect(
+                self._config.database,
+                self._config.user,
+                self._config.password,
+                self._config.host,
+                self._config.port
+            )
+        end)
+        -- Restore SSL env vars on any exit (success or error) within this attempt
+        self:_restoreSSLEnv(saved_env)
+
+        if not success then
+            error("Failed to connect to MySQL: " .. tostring(result))
+        end
+        local conn = result
+        if not conn then
+            error("Failed to connect to MySQL: nil returned")
+        end
+        return conn
     end
+
+    local conn = Retry.execute(connect, retry_config, "MySQL connection")
+    -- Final restore ensures clean state even if Retry.execute propagates an error
+    self:_restoreSSLEnv(saved_env)
     self._conn = conn
+    self:setEncryptionKey()
 end
 
 function MySQL:disconnect()
@@ -96,18 +187,47 @@ function MySQL:quoteIdentifier(name)
     return "`" .. name:gsub("`", "``") .. "`"
 end
 
+-- Set encryption key as session variable to avoid exposing it in SQL strings
+-- Properly escapes key to prevent SQL injection
+function MySQL:setEncryptionKey(conn)
+    conn = conn or self._conn
+    local Encryption = require("jade.encryption")
+    if Encryption.isEnabled() then
+        local key = Encryption.getKey()
+        -- Escape backslashes first, then single quotes for MySQL
+        local escaped_key = key:gsub("\\", "\\\\"):gsub("'", "''")
+        local sql = "SET @jade_encryption_key = '" .. escaped_key .. "'"
+        local res, err = conn:execute(sql)
+        if not res then
+            error("Failed to set encryption key session variable: " .. tostring(err))
+        end
+    end
+end
+
 -- Transaction methods
 function MySQL:getConnection()
-    local conn, err = self._env:connect(
-        self._config.database,
-        self._config.user,
-        self._config.password,
-        self._config.host,
-        self._config.port
-    )
-    if not conn then
-        error("Failed to connect to MySQL: " .. tostring(err))
+    -- Set SSL env vars, connect, then restore (wrapped in pcall for safety)
+    local saved_env = self:_setSSLEnv()
+    local success, result = pcall(function()
+        return self._env:connect(
+            self._config.database,
+            self._config.user,
+            self._config.password,
+            self._config.host,
+            self._config.port
+        )
+    end)
+    self:_restoreSSLEnv(saved_env)
+
+    if not success then
+        error("Failed to connect to MySQL: " .. tostring(result))
     end
+    local conn = result
+    if not conn then
+        error("Failed to connect to MySQL: nil returned")
+    end
+    -- Set encryption key for new connection
+    self:setEncryptionKey(conn)
     return conn
 end
 
@@ -129,6 +249,26 @@ function MySQL:rollbackTransaction(conn)
     local res, err = conn:execute("ROLLBACK")
     if not res then
         error("Failed to rollback transaction: " .. tostring(err))
+    end
+end
+
+-- Set query timeout (MySQL uses max_execution_time in milliseconds)
+function MySQL:setQueryTimeout(timeout_ms)
+    self:_ensureConnected()
+    local sql = "SET max_execution_time = " .. tostring(timeout_ms)
+    local res, err = self._conn:execute(sql)
+    if not res then
+        error("Failed to set query timeout: " .. tostring(err))
+    end
+end
+
+-- Clear query timeout
+function MySQL:clearQueryTimeout()
+    self:_ensureConnected()
+    local sql = "SET max_execution_time = 0"
+    local res, err = self._conn:execute(sql)
+    if not res then
+        error("Failed to clear query timeout: " .. tostring(err))
     end
 end
 
@@ -220,7 +360,6 @@ function MySQL:generateSelect(query)
     local bindings = {}
 
     local Encryption = require("jade.encryption")
-    local entity_name = query._entity._table
     local columns = query._entity._columns
 
     -- SELECT clause with DISTINCT
@@ -254,11 +393,10 @@ function MySQL:generateSelect(query)
                 for col_name, _ in pairs(columns) do
                     local col_ref = self:quoteIdentifier(col_name)
                     if fields[col_name] then
-                        -- Encrypted column: wrap with AES_DECRYPT
-                        local key = Encryption.getKey()
+                        -- Encrypted column: wrap with AES_DECRYPT using session variable
                         select_parts[#select_parts + 1] = string.format(
-                            "CAST(AES_DECRYPT(%s, '%s') AS CHAR) AS %s",
-                            col_ref, key:gsub("'", "''"), col_ref
+                            "CAST(AES_DECRYPT(%s, @jade_encryption_key) AS CHAR) AS %s",
+                            col_ref, col_ref
                         )
                     else
                         select_parts[#select_parts + 1] = col_ref
@@ -360,8 +498,8 @@ function MySQL:generateInsert(table_name, data, entity)
     for key, value in pairs(data) do
         columns[#columns + 1] = self:quoteIdentifier(key)
         if encrypt_cols[key] and Encryption.isEnabled() then
-            -- Use MySQL AES_ENCRYPT
-            placeholders[#placeholders + 1] = "AES_ENCRYPT(?, '" .. Encryption.getKey():gsub("'", "''") .. "')"
+            -- Use MySQL AES_ENCRYPT with session variable
+            placeholders[#placeholders + 1] = "AES_ENCRYPT(?, @jade_encryption_key)"
         else
             placeholders[#placeholders + 1] = "?"
         end
@@ -494,16 +632,16 @@ function MySQL:generateUpsert(table_name, data, conflict_columns, entity)
     return sql, bindings
 end
 
-function MySQL:generateUpdate(table_name, data, where)
+function MySQL:generateUpdate(table_name, data, where, entity)
     local set_parts = {}
     local bindings = {}
 
     local Encryption = require("jade.encryption")
-    local encrypt_cols = {}
+    local encrypt_cols = entity and entity._encrypt_cols or {}
 
     for key, value in pairs(data) do
         if encrypt_cols[key] and Encryption.isEnabled() then
-            set_parts[#set_parts + 1] = self:quoteIdentifier(key) .. " = AES_ENCRYPT(?, '" .. Encryption.getKey():gsub("'", "''") .. "')"
+            set_parts[#set_parts + 1] = self:quoteIdentifier(key) .. " = AES_ENCRYPT(?, @jade_encryption_key)"
         else
             set_parts[#set_parts + 1] = self:quoteIdentifier(key) .. " = ?"
         end
@@ -545,6 +683,47 @@ function MySQL:getLastInsertId()
     end
     local row = res:fetch({}, "a")
     return row and row.id
+end
+
+--- Execute a function within a database transaction.
+-- Automatically commits on success, rolls back on error.
+-- Uses the shared connection to ensure all operations are within the same transaction.
+--
+-- IMPORTANT MySQL LIMITATION: DDL statements (CREATE TABLE, DROP TABLE, ALTER TABLE,
+-- TRUNCATE TABLE, RENAME TABLE) cause implicit commits in MySQL and CANNOT be rolled
+-- back. If a migration contains DDL followed by DML and the DML fails, the DDL will
+-- remain committed. This is a MySQL limitation, not a Jade bug.
+-- PostgreSQL and SQLite support transactional DDL and are fully atomic.
+--
+-- @param fn function The function to execute within the transaction
+-- @return boolean true if the transaction was committed successfully
+function MySQL:transaction(fn)
+    self:_ensureConnected()
+
+    local conn = self._conn
+    local res, err = conn:execute("START TRANSACTION")
+    if not res then
+        error("Failed to begin transaction: " .. tostring(err))
+    end
+
+    local ok, fn_err = pcall(fn)
+
+    if ok then
+        local commit_res, commit_err = conn:execute("COMMIT")
+        if not commit_res then
+            error("Failed to commit transaction: " .. tostring(commit_err))
+        end
+        return true
+    else
+        local rollback_res, rollback_err = conn:execute("ROLLBACK")
+        if not rollback_res then
+            -- Connection may be in undefined state after failed rollback
+            self._conn = nil
+            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+        end
+        -- Re-raise original error preserving context
+        error(fn_err, 2)
+    end
 end
 
 return MySQL

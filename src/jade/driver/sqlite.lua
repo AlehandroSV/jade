@@ -52,16 +52,24 @@ function SQLite:_ensureConnected()
         self._env = sqlite3.sqlite3()
     end
 
-    local conn, err = self._env:connect(self._config.database)
-    if not conn then
-        error("Failed to connect to SQLite: " .. tostring(err))
+    local Retry = require("jade.util.retry")
+    local retry_config = Retry.getConfig(self._config)
+
+    local function connect()
+        local conn, err = self._env:connect(self._config.database)
+        if not conn then
+            error("Failed to connect to SQLite: " .. tostring(err))
+        end
+
+        -- Enable WAL mode for better concurrency
+        conn:execute("PRAGMA journal_mode=WAL")
+        -- Enable foreign keys
+        conn:execute("PRAGMA foreign_keys=ON")
+
+        return conn
     end
 
-    -- Enable WAL mode for better concurrency
-    conn:execute("PRAGMA journal_mode=WAL")
-    -- Enable foreign keys
-    conn:execute("PRAGMA foreign_keys=ON")
-
+    local conn = Retry.execute(connect, retry_config, "SQLite connection")
     self._conn = conn
 end
 
@@ -119,6 +127,26 @@ function SQLite:rollbackTransaction(conn)
     local res, err = conn:execute("ROLLBACK")
     if not res then
         error("Failed to rollback transaction: " .. tostring(err))
+    end
+end
+
+-- Set query timeout (SQLite uses busy_timeout in milliseconds)
+function SQLite:setQueryTimeout(timeout_ms)
+    self:_ensureConnected()
+    local sql = "PRAGMA busy_timeout = " .. tostring(timeout_ms)
+    local res, err = self._conn:execute(sql)
+    if not res then
+        error("Failed to set query timeout: " .. tostring(err))
+    end
+end
+
+-- Clear query timeout
+function SQLite:clearQueryTimeout()
+    self:_ensureConnected()
+    local sql = "PRAGMA busy_timeout = 0"
+    local res, err = self._conn:execute(sql)
+    if not res then
+        error("Failed to clear query timeout: " .. tostring(err))
     end
 end
 
@@ -453,7 +481,7 @@ function SQLite:generateUpsert(table_name, data, conflict_columns, entity)
     return sql, bindings
 end
 
-function SQLite:generateUpdate(table_name, data, where)
+function SQLite:generateUpdate(table_name, data, where, entity)
     local set_parts = {}
     local bindings = {}
 
@@ -497,6 +525,41 @@ function SQLite:getLastInsertId()
     end
     local row = res:fetch({}, "a")
     return row and row.id
+end
+
+--- Execute a function within a database transaction.
+-- Automatically commits on success, rolls back on error.
+-- Uses the shared connection to ensure all operations are within the same transaction.
+-- SQLite supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
+-- @param fn function The function to execute within the transaction
+-- @return boolean true if the transaction was committed successfully
+function SQLite:transaction(fn)
+    self:_ensureConnected()
+
+    local conn = self._conn
+    local res, err = conn:execute("BEGIN")
+    if not res then
+        error("Failed to begin transaction: " .. tostring(err))
+    end
+
+    local ok, fn_err = pcall(fn)
+
+    if ok then
+        local commit_res, commit_err = conn:execute("COMMIT")
+        if not commit_res then
+            error("Failed to commit transaction: " .. tostring(commit_err))
+        end
+        return true
+    else
+        local rollback_res, rollback_err = conn:execute("ROLLBACK")
+        if not rollback_res then
+            -- Connection may be in undefined state after failed rollback
+            self._conn = nil
+            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+        end
+        -- Re-raise original error preserving context
+        error(fn_err, 2)
+    end
 end
 
 return SQLite

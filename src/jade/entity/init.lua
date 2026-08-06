@@ -403,55 +403,53 @@ end
 function Entity:_resolveChildren(relations_data, parentInstance)
     for key, value in pairs(relations_data) do
         local rel = self._relations[key]
-        if not rel then goto continue end
+        if rel then
+            if rel.type == "hasMany" or rel.type == "hasOne" then
+                local target = rel.target
+                local items = {}
 
-        if rel.type == "hasMany" or rel.type == "hasOne" then
-            local target = rel.target
-            local items = {}
+                if value.create then
+                    -- Single: { create = { ... } }
+                    items = { value }
+                elseif #value > 0 then
+                    -- Array: { { create = {...} }, { create = {...} } }
+                    items = value
+                end
 
-            if value.create then
-                -- Single: { create = { ... } }
-                items = { value }
-            elseif #value > 0 then
-                -- Array: { { create = {...} }, { create = {...} } }
-                items = value
-            end
+                for _, item in ipairs(items) do
+                    if item.create then
+                        local child_data = {}
+                        for k, v in pairs(item.create) do child_data[k] = v end
+                        child_data[rel.foreign_key] = parentInstance._data.id
+                        target:create(child_data)
+                    elseif item.connect then
+                        -- Connect existing record (update its FK)
+                        local record = target:findUnique({ where = item.connect })
+                        if record then
+                            record:update({ [rel.foreign_key] = parentInstance._data.id })
+                        end
+                    end
+                end
 
-            for _, item in ipairs(items) do
-                if item.create then
-                    local child_data = {}
-                    for k, v in pairs(item.create) do child_data[k] = v end
-                    child_data[rel.foreign_key] = parentInstance._data.id
-                    target:create(child_data)
-                elseif item.connect then
-                    -- Connect existing record (update its FK)
-                    local record = target:findUnique({ where = item.connect })
-                    if record then
-                        record:update({ [rel.foreign_key] = parentInstance._data.id })
+            elseif rel.type == "hasAndBelongsToMany" then
+                local driver = self._driver
+                if value.connect then
+                    local ids = {}
+                    if value.connect.ids then
+                        ids = value.connect.ids
+                    elseif value.connect.id then
+                        ids = { value.connect.id }
+                    end
+                    for _, target_id in ipairs(ids) do
+                        driver:execute(
+                            string.format("INSERT INTO %s (%s, %s) VALUES ($1, $2)",
+                                rel.join_table, rel.source_foreign_key, rel.target_foreign_key),
+                            { parentInstance._data.id, target_id }
+                        )
                     end
                 end
             end
-
-        elseif rel.type == "hasAndBelongsToMany" then
-            local driver = self._driver
-            if value.connect then
-                local ids = {}
-                if value.connect.ids then
-                    ids = value.connect.ids
-                elseif value.connect.id then
-                    ids = { value.connect.id }
-                end
-                for _, target_id in ipairs(ids) do
-                    driver:execute(
-                        string.format("INSERT INTO %s (%s, %s) VALUES ($1, $2)",
-                            rel.join_table, rel.source_foreign_key, rel.target_foreign_key),
-                        { parentInstance._data.id, target_id }
-                    )
-                end
-            end
         end
-
-        ::continue::
     end
 end
 
@@ -569,7 +567,7 @@ function Entity:update(id_or_options, data)
             local enc_data, encrypt_cols = Encryption.prepareUpdate(update_data, self._table, self._columns, self._driver)
             self._encrypt_cols = encrypt_cols
 
-            local sql, bindings = self._driver:generateUpdate(self._table, enc_data, where)
+            local sql, bindings = self._driver:generateUpdate(self._table, enc_data, where, self)
             local result = self._driver:execute(sql, bindings)
             local row = result[1] or result
 

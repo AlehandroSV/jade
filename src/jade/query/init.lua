@@ -24,7 +24,33 @@ function Query.new(entity)
         _distinct = false,
         _cache_ttl = nil,
         _cache_key = nil,
+        _timeout = nil,
+        _include_trashed = false,
+        _only_trashed = false,
     }, Query)
+end
+
+-- Set query timeout in milliseconds
+function Query:timeout(ms)
+    if type(ms) ~= "number" or ms <= 0 then
+        error("Timeout must be a positive number in milliseconds")
+    end
+    self._timeout = ms
+    return self
+end
+
+-- Include soft-deleted records in results
+function Query:withTrashed()
+    self._include_trashed = true
+    self._only_trashed = false
+    return self
+end
+
+-- Return only soft-deleted records
+function Query:onlyTrashed()
+    self._include_trashed = false
+    self._only_trashed = true
+    return self
 end
 
 function Query:where(condition)
@@ -163,7 +189,20 @@ function Query:get()
 
     local sql, bindings = self:toSQL()
     local driver = self._entity._driver
+
+    -- Apply timeout if set (per-query or global)
+    local timeout_ms = self:_resolveTimeout()
+    if timeout_ms then
+        driver:setQueryTimeout(timeout_ms)
+    end
+
     local raw = driver:execute(sql, bindings)
+
+    -- Reset timeout after execution
+    if timeout_ms then
+        driver:clearQueryTimeout()
+    end
+
     local instances = {}
 
     -- Handle custom encryption decryption at Lua level
@@ -191,6 +230,21 @@ function Query:get()
     end
 
     return instances
+end
+
+-- Resolve timeout: per-query takes priority over global config
+function Query:_resolveTimeout()
+    if self._timeout then
+        return self._timeout
+    end
+    local ok, config = pcall(require, "jade.config")
+    if ok then
+        local cfg = config.get()
+        if cfg and cfg.query_timeout then
+            return cfg.query_timeout
+        end
+    end
+    return nil
 end
 
 function Query:_eagerLoad(instances)
@@ -415,6 +469,9 @@ function Query:first()
     q._distinct = self._distinct
     q._limit = 1
     q._offset = self._offset
+    q._timeout = self._timeout
+    q._include_trashed = self._include_trashed
+    q._only_trashed = self._only_trashed
     local results = q:get()
     return results[1]
 end
@@ -431,6 +488,9 @@ function Query:find(id)
     q._distinct = self._distinct
     q._limit = 1
     q._offset = self._offset
+    q._timeout = self._timeout
+    q._include_trashed = self._include_trashed
+    q._only_trashed = self._only_trashed
     local results = q:get()
     return results[1]
 end
@@ -447,6 +507,9 @@ function Query:count()
     q._distinct = self._distinct
     q._limit = self._limit
     q._offset = self._offset
+    q._timeout = self._timeout
+    q._include_trashed = self._include_trashed
+    q._only_trashed = self._only_trashed
     local sql, bindings = q:toSQL()
     local driver = self._entity._driver
     local result = driver:execute(sql, bindings)
@@ -630,8 +693,6 @@ function Query:deleteAll()
 end
 
 function Query:_compileWhere()
-    local Condition = require("jade.query.condition")
-
     if #self._where == 0 then
         -- Return a condition that matches all rows (always true)
         return Condition.new("1", "=", 1, "")
@@ -649,6 +710,19 @@ function Query:_compileWhere()
 end
 
 function Query:toSQL()
+    -- Apply soft delete filter if entity has soft delete enabled
+    local SoftDelete = require("jade.entity.soft_delete")
+    if SoftDelete.isSoftDeleted(self._entity) and not self._include_trashed then
+        local col = SoftDelete.getSoftDeleteColumn(self._entity)
+        if self._only_trashed then
+            -- Only return soft-deleted records
+            self._where[#self._where + 1] = Condition.new(col, "IS NOT", nil, self._table)
+        else
+            -- Exclude soft-deleted records (default behavior)
+            self._where[#self._where + 1] = Condition.new(col, "IS", nil, self._table)
+        end
+    end
+
     local driver = self._entity._driver
     local sql, bindings = driver:generateSelect(self)
     Security.validateQuery(sql, bindings)

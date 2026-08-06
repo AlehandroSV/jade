@@ -7,7 +7,7 @@ Driver.__index = Driver
 -- execute(sql, bindings)
 -- generateSelect(query) -> sql, bindings
 -- generateInsert(table_name, data, entity) -> sql, bindings
--- generateUpdate(table_name, data, where) -> sql, bindings
+-- generateUpdate(table_name, data, where, entity) -> sql, bindings
 -- generateDelete(table_name, where) -> sql, bindings
 -- mapType(column_type) -> db_type_string
 -- getConnection() -> connection
@@ -41,7 +41,7 @@ function Driver:generateInsert(table_name, data, entity)
     error("Driver:generateInsert() not implemented")
 end
 
-function Driver:generateUpdate(table_name, data, where)
+function Driver:generateUpdate(table_name, data, where, entity)
     error("Driver:generateUpdate() not implemented")
 end
 
@@ -116,6 +116,14 @@ end
 -- Override in drivers that use different quoting (e.g., MySQL uses backticks).
 function Driver:quoteIdentifier(name)
     return '"' .. name:gsub('"', '""') .. '"'
+end
+
+--- Execute a function within a database transaction.
+-- Automatically commits on success, rolls back on error.
+-- @param fn function The function to execute within the transaction
+-- @return boolean true if the transaction was committed successfully
+function Driver:transaction(fn)
+    error("Driver:transaction() not implemented")
 end
 
 return Driver

@@ -1,12 +1,6 @@
 local M = {}
 local Quoting = require("jade.util.quoting")
 
--- Test helper state
-local test_state = {
-    original_driver = nil,
-    transaction_active = false,
-}
-
 -- Setup test database
 -- jade.test.setup({ database = "test", truncate = true, seed = true })
 function M.setup(Jade, opts)

@@ -215,4 +215,165 @@ describe("MySQL Driver SQL Generation", function()
             assert.is_falsy(string.find(sql, "AUTO_INCREMENT"))
         end)
     end)
+
+    describe("SSL Configuration", function()
+        it("stores ssl option when enabled", function()
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+            }
+            assert.is_true(mysql._config.ssl)
+        end)
+
+        it("defaults ssl to false", function()
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+            }
+            assert.is_false(mysql._config.ssl or false)
+        end)
+
+        it("stores ssl_verify option", function()
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_verify = true,
+            }
+            assert.is_true(mysql._config.ssl_verify)
+        end)
+
+        it("stores ssl_ca certificate path", function()
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_ca = "/path/to/ca.pem",
+            }
+            assert.are.equal("/path/to/ca.pem", mysql._config.ssl_ca)
+        end)
+
+        it("stores ssl_cert certificate path", function()
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_cert = "/path/to/cert.pem",
+            }
+            assert.are.equal("/path/to/cert.pem", mysql._config.ssl_cert)
+        end)
+
+        it("stores ssl_key key path", function()
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_key = "/path/to/key.pem",
+            }
+            assert.are.equal("/path/to/key.pem", mysql._config.ssl_key)
+        end)
+
+        it("stores all SSL options together", function()
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "db.example.com",
+                port = 3306,
+                database = "myapp",
+                user = "app",
+                password = "secret",
+                ssl = true,
+                ssl_verify = true,
+                ssl_ca = "/etc/ssl/ca.pem",
+                ssl_cert = "/etc/ssl/cert.pem",
+                ssl_key = "/etc/ssl/key.pem",
+            }
+            assert.is_true(mysql._config.ssl)
+            assert.is_true(mysql._config.ssl_verify)
+            assert.are.equal("/etc/ssl/ca.pem", mysql._config.ssl_ca)
+            assert.are.equal("/etc/ssl/cert.pem", mysql._config.ssl_cert)
+            assert.are.equal("/etc/ssl/key.pem", mysql._config.ssl_key)
+        end)
+
+        it("sets MYSQL_OPT_SSL_MODE env var when ssl enabled", function()
+            -- Only test with FFI available (LuaJIT)
+            local ok, ffi = pcall(require, "ffi")
+            if not ok then return end
+
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+            }
+            local saved = mysql:_setSSLEnv()
+            assert.are.equal("REQUIRED", os.getenv("MYSQL_OPT_SSL_MODE"))
+            mysql:_restoreSSLEnv(saved)
+        end)
+
+        it("sets VERIFY_IDENTITY when ssl_verify is true", function()
+            local ok, ffi = pcall(require, "ffi")
+            if not ok then return end
+
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_verify = true,
+            }
+            local saved = mysql:_setSSLEnv()
+            assert.are.equal("VERIFY_IDENTITY", os.getenv("MYSQL_OPT_SSL_MODE"))
+            mysql:_restoreSSLEnv(saved)
+        end)
+
+        it("sets VERIFY_CA when ssl_verify is false", function()
+            local ok, ffi = pcall(require, "ffi")
+            if not ok then return end
+
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_verify = false,
+            }
+            local saved = mysql:_setSSLEnv()
+            assert.are.equal("VERIFY_CA", os.getenv("MYSQL_OPT_SSL_MODE"))
+            mysql:_restoreSSLEnv(saved)
+        end)
+
+        it("restores env vars after _setSSLEnv", function()
+            local ok, ffi = pcall(require, "ffi")
+            if not ok then return end
+
+            local mysql = MySQL.new()
+            mysql._config = {
+                host = "localhost",
+                database = "test",
+                user = "test",
+                ssl = true,
+                ssl_ca = "/path/to/ca.pem",
+            }
+            local original_mode = os.getenv("MYSQL_OPT_SSL_MODE")
+            local saved = mysql:_setSSLEnv()
+            mysql:_restoreSSLEnv(saved)
+            assert.are.equal(original_mode, os.getenv("MYSQL_OPT_SSL_MODE"))
+        end)
+    end)
 end)

@@ -26,7 +26,12 @@ function PostgreSQL:connect(config)
         port = config.port or 5432,
         database = config.database,
         user = config.user or "postgres",
-        password = config.password or ""
+        password = config.password or "",
+        ssl = config.ssl or false,
+        ssl_verify = config.ssl_verify,
+        ssl_ca = config.ssl_ca,
+        ssl_cert = config.ssl_cert,
+        ssl_key = config.ssl_key,
     }
 
     -- Initialize connection pool if pool_size is specified
@@ -43,12 +48,37 @@ end
 
 function PostgreSQL:_ensureConnected()
     if self._conn then return end
-    local pg = pgmoon.new(self._config)
-    local ok, err = pg:connect()
-    if not ok then
-        error("Failed to connect to PostgreSQL: " .. tostring(err))
+
+    local Retry = require("jade.util.retry")
+    local retry_config = Retry.getConfig(self._config)
+
+    local function connect()
+        local pg = pgmoon.new(self._config)
+        if self._config.ssl then
+            pg:sslmode("require")
+            if self._config.ssl_verify == false then
+                pg:sslmode("require")
+            end
+            if self._config.ssl_ca then
+                pg:sslrootcert(self._config.ssl_ca)
+            end
+            if self._config.ssl_cert then
+                pg:sslcert(self._config.ssl_cert)
+            end
+            if self._config.ssl_key then
+                pg:sslkey(self._config.ssl_key)
+            end
+        end
+        local ok, err = pg:connect()
+        if not ok then
+            error("Failed to connect to PostgreSQL: " .. tostring(err))
+        end
+        return pg
     end
+
+    local pg = Retry.execute(connect, retry_config, "PostgreSQL connection")
     self._conn = pg
+    self:setEncryptionKey()
 end
 
 function PostgreSQL:disconnect()
@@ -69,13 +99,63 @@ function PostgreSQL:closeConnection(conn)
     end
 end
 
+-- Set encryption key as session variable to avoid exposing it in SQL strings
+-- Uses parameterized query to prevent key exposure in SET statement itself
+function PostgreSQL:setEncryptionKey(conn)
+    conn = conn or self._conn
+    local Encryption = require("jade.encryption")
+    if Encryption.isEnabled() then
+        local key = Encryption.getKey()
+        -- Use parameterized query to avoid key exposure in SQL logs
+        local sql = "SELECT set_config('jade.encryption_key', $1, true)"
+        local res, err = conn:query(sql, key)
+        if not res then
+            error("Failed to set encryption key session variable: " .. tostring(err))
+        end
+    end
+end
+
+-- Set query timeout (PostgreSQL uses statement_timeout in milliseconds)
+function PostgreSQL:setQueryTimeout(timeout_ms)
+    self:_ensureConnected()
+    local sql = "SET statement_timeout = " .. tostring(timeout_ms)
+    local res, err = self._conn:query(sql)
+    if not res then
+        error("Failed to set query timeout: " .. tostring(err))
+    end
+end
+
+-- Clear query timeout
+function PostgreSQL:clearQueryTimeout()
+    self:_ensureConnected()
+    local sql = "SET statement_timeout = 0"
+    local res, err = self._conn:query(sql)
+    if not res then
+        error("Failed to clear query timeout: " .. tostring(err))
+    end
+end
+
 -- Transaction methods
 function PostgreSQL:getConnection()
     local pg = pgmoon.new(self._config)
+    if self._config.ssl then
+        pg:sslmode("require")
+        if self._config.ssl_ca then
+            pg:sslrootcert(self._config.ssl_ca)
+        end
+        if self._config.ssl_cert then
+            pg:sslcert(self._config.ssl_cert)
+        end
+        if self._config.ssl_key then
+            pg:sslkey(self._config.ssl_key)
+        end
+    end
     local ok, err = pg:connect()
     if not ok then
         error("Failed to connect to PostgreSQL: " .. tostring(err))
     end
+    -- Set encryption key for new connection
+    self:setEncryptionKey(pg)
     return pg
 end
 
@@ -179,7 +259,6 @@ function PostgreSQL:generateSelect(query)
     local bindings = {}
 
     local Encryption = require("jade.encryption")
-    local entity_name = query._entity._table
     local columns = query._entity._columns
 
     -- SELECT clause with DISTINCT
@@ -211,11 +290,10 @@ function PostgreSQL:generateSelect(query)
                 for col_name, _ in pairs(columns) do
                     local col_ref = Quoting.quoteIdentifier(col_name)
                     if fields[col_name] then
-                        -- Encrypted column: wrap with decryption
-                        local key = Encryption.getKey()
+                        -- Encrypted column: wrap with decryption using session variable
                         select_parts[#select_parts + 1] = string.format(
-                            "pgp_sym_decrypt(%s, '%s') AS %s",
-                            col_ref, key:gsub("'", "''"), col_ref
+                            "pgp_sym_decrypt(%s, current_setting('jade.encryption_key')) AS %s",
+                            col_ref, col_ref
                         )
                     else
                         select_parts[#select_parts + 1] = col_ref
@@ -331,8 +409,8 @@ function PostgreSQL:generateInsert(table_name, data, entity)
     for key, value in pairs(data) do
         columns[#columns + 1] = Quoting.quoteIdentifier(key)
         if encrypt_cols[key] and Encryption.isEnabled() then
-            -- Use pgcrypto encryption function
-            placeholders[#placeholders + 1] = "pgp_sym_encrypt($" .. i .. "::text, '" .. Encryption.getKey():gsub("'", "''") .. "')"
+            -- Use pgcrypto encryption function with session variable
+            placeholders[#placeholders + 1] = "pgp_sym_encrypt($" .. i .. "::text, current_setting('jade.encryption_key'))"
         else
             placeholders[#placeholders + 1] = "$" .. i
         end
@@ -494,17 +572,17 @@ function PostgreSQL:generateUpsert(table_name, data, conflict_columns, entity)
     return sql, bindings
 end
 
-function PostgreSQL:generateUpdate(table_name, data, where)
+function PostgreSQL:generateUpdate(table_name, data, where, entity)
     local set_parts = {}
     local bindings = {}
     local i = 1
 
     local Encryption = require("jade.encryption")
-    local encrypt_cols = {}  -- Will be set by entity if needed
+    local encrypt_cols = entity and entity._encrypt_cols or {}
 
     for key, value in pairs(data) do
         if encrypt_cols[key] and Encryption.isEnabled() then
-            set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = pgp_sym_encrypt($" .. i .. "::text, '" .. Encryption.getKey():gsub("'", "''") .. "')"
+            set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = pgp_sym_encrypt($" .. i .. "::text, current_setting('jade.encryption_key'))"
         else
             set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = $" .. i
         end
@@ -552,6 +630,41 @@ function PostgreSQL:generateDelete(table_name, where)
     )
 
     return sql, bindings
+end
+
+--- Execute a function within a database transaction.
+-- Automatically commits on success, rolls back on error.
+-- Uses the shared connection to ensure all operations are within the same transaction.
+-- PostgreSQL supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
+-- @param fn function The function to execute within the transaction
+-- @return boolean true if the transaction was committed successfully
+function PostgreSQL:transaction(fn)
+    self:_ensureConnected()
+
+    local conn = self._conn
+    local res, err = conn:query("BEGIN")
+    if not res then
+        error("Failed to begin transaction: " .. tostring(err))
+    end
+
+    local ok, fn_err = pcall(fn)
+
+    if ok then
+        local commit_res, commit_err = conn:query("COMMIT")
+        if not commit_res then
+            error("Failed to commit transaction: " .. tostring(commit_err))
+        end
+        return true
+    else
+        local rollback_res, rollback_err = conn:query("ROLLBACK")
+        if not rollback_res then
+            -- Connection may be in undefined state after failed rollback
+            self._conn = nil
+            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+        end
+        -- Re-raise original error preserving context
+        error(fn_err, 2)
+    end
 end
 
 return PostgreSQL

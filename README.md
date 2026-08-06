@@ -19,7 +19,7 @@ Jade is a modern ORM/Data Mapper for Lua that offers a modern development experi
 
 ### Features
 
-- **Multi-Driver** - PostgreSQL, MySQL, SQLite
+- **Multi-Driver** - PostgreSQL, MySQL, MariaDB, SQLite
 - **Declarative Schema** - Convention-over-configuration with automatic table names, timestamps, foreign keys
 - **Query Builder** - Chainable queries with JOINs, GROUP BY, HAVING, DISTINCT, subqueries
 - **Relations** - belongsTo, hasMany, hasOne, hasAndBelongsToMany, hasManyThrough
@@ -64,7 +64,7 @@ local jade = require("jade")
 -- Configure connection
 jade.configure({
     database = {
-        driver = "postgresql",   -- or "mysql", "sqlite"
+        driver = "postgresql",   -- or "mysql", "mariadb", "sqlite"
         host = "localhost",
         port = 5432,
         database = "myapp",
@@ -101,12 +101,13 @@ user:delete()
 
 ### Database Drivers
 
-Jade supports three database drivers out of the box:
+Jade supports four database drivers out of the box:
 
 | Driver | Package | Key Features |
 |--------|---------|-------------|
 | PostgreSQL | luapgsql | RETURNING, CASCADE, TIMESTAMPTZ, JSONB |
 | MySQL | luasql-mysql | AUTO_INCREMENT, backtick quoting, ENGINE=InnoDB |
+| MariaDB | luasql-mysql | RETURNING (10.5+), JSON, UUID, INET4/6, auto version detection |
 | SQLite | luasql-sqlite3 | AUTOINCREMENT, WAL mode, foreign_keys pragma |
 
 ```lua
@@ -116,9 +117,74 @@ jade.configure({ database = { driver = "postgresql", ... } })
 -- MySQL
 jade.configure({ database = { driver = "mysql", ... } })
 
+-- MariaDB
+jade.configure({ database = { driver = "mariadb", ... } })
+
 -- SQLite
 jade.configure({ database = { driver = "sqlite", database = "app.db" } })
 ```
+
+### SSL/TLS
+
+Jade supports SSL/TLS connections for PostgreSQL, MySQL, and MariaDB:
+
+```lua
+-- PostgreSQL SSL
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+    }
+})
+
+-- Mutual TLS (mTLS) with client certificate
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+        ssl_cert = "/path/to/client-cert.pem",
+        ssl_key = "/path/to/client-key.pem",
+    }
+})
+
+-- MySQL/MariaDB SSL
+jade.configure({
+    database = {
+        driver = "mysql",  -- or "mariadb"
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+        ssl_cert = "/path/to/client-cert.pem",
+        ssl_key = "/path/to/client-key.pem",
+    }
+})
+```
+
+**SSL Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `ssl` | boolean | `false` | Enable SSL/TLS |
+| `ssl_verify` | boolean | `nil` | Verify server certificate |
+| `ssl_ca` | string | `nil` | Path to CA certificate |
+| `ssl_cert` | string | `nil` | Path to client certificate (mTLS) |
+| `ssl_key` | string | `nil` | Path to client key (mTLS) |
 
 ### Declarative Schema
 
@@ -770,7 +836,7 @@ Jade e um ORM/Data Mapper moderno para Lua que oferece uma experiencia moderna d
 
 ### Features
 
-- **Multi-Driver** - PostgreSQL, MySQL, SQLite
+- **Multi-Driver** - PostgreSQL, MySQL, MariaDB, SQLite
 - **Schema Declarativo** - Convention-over-configuration com nomes de tabela automaticos, timestamps, foreign keys
 - **Query Builder** - Consultas chainable com JOINs, GROUP BY, HAVING, DISTINCT, subqueries
 - **Relacoes** - belongsTo, hasMany, hasOne, hasAndBelongsToMany, hasManyThrough
@@ -815,7 +881,7 @@ local jade = require("jade")
 -- Configurar conexao
 jade.configure({
     database = {
-        driver = "postgresql",   -- ou "mysql", "sqlite"
+        driver = "postgresql",   -- ou "mysql", "mariadb", "sqlite"
         host = "localhost",
         port = 5432,
         database = "myapp",
@@ -856,7 +922,66 @@ user:delete()
 |--------|--------|----------------|
 | PostgreSQL | luapgsql | RETURNING, CASCADE, TIMESTAMPTZ, JSONB |
 | MySQL | luasql-mysql | AUTO_INCREMENT, quoting com backtick, ENGINE=InnoDB |
+| MariaDB | luasql-mysql | RETURNING (10.5+), JSON, UUID, INET4/6, deteccao automatica de versao |
 | SQLite | luasql-sqlite3 | AUTOINCREMENT, modo WAL, pragma foreign_keys |
+
+### SSL/TLS (PostgreSQL)
+
+Jade suporta conexões SSL/TLS para PostgreSQL para proteger dados em trânsito:
+
+```lua
+-- SSL básico
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+    }
+})
+
+-- SSL com verificação de certificado
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+    }
+})
+
+-- TLS Mútuo (mTLS) com certificado do cliente
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "db.example.com",
+        database = "myapp",
+        user = "app",
+        password = "secret",
+        ssl = true,
+        ssl_verify = true,
+        ssl_ca = "/path/to/ca.pem",
+        ssl_cert = "/path/to/client-cert.pem",
+        ssl_key = "/path/to/client-key.pem",
+    }
+})
+```
+
+**Opções SSL:**
+
+| Opção | Tipo | Padrão | Descrição |
+|-------|------|--------|-----------|
+| `ssl` | boolean | `false` | Habilitar SSL/TLS |
+| `ssl_verify` | boolean | `nil` | Verificar certificado do servidor |
+| `ssl_ca` | string | `nil` | Caminho para certificado CA |
+| `ssl_cert` | string | `nil` | Caminho para certificado do cliente (mTLS) |
+| `ssl_key` | string | `nil` | Caminho para chave do cliente (mTLS) |
 
 ### Schema Declarativo
 
