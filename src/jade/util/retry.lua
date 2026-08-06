@@ -4,7 +4,9 @@ local M = {}
 
 -- Default retry configuration
 local defaults = {
-    max_attempts = 1,        -- No retry by default
+    max_attempts = 1,        -- No retry by default (backward compatible)
+                               -- Configure explicitly for production resiliency:
+                               --   jade.configure({ database = { retry = { max_attempts = 3, delay = 1000 } } })
     delay = 1000,            -- 1 second initial delay
     backoff = "exponential", -- "exponential" or "linear"
     max_delay = 30000,       -- 30 seconds max delay
@@ -53,6 +55,7 @@ function M.execute(fn, config, context)
 
     local last_err
     for attempt = 1, max_attempts do
+        -- Use tostring() to handle both string errors and table errors (JadeError etc)
         local ok, result = pcall(fn)
 
         if ok then
@@ -63,14 +66,16 @@ function M.execute(fn, config, context)
 
         if attempt < max_attempts then
             local delay = M.calculateDelay(attempt, config)
+            local err_msg = type(result) == "table" and ("[" .. (result.code or "ERROR") .. "] " .. tostring(result.message or result)) or tostring(result)
             log.warn("[%s] Attempt %d/%d failed: %s. Retrying in %dms...",
-                context or "Retry", attempt, max_attempts, tostring(result), delay)
+                context or "Retry", attempt, max_attempts, err_msg, delay)
             M.sleep(delay)
         end
     end
 
+    local err_msg = type(last_err) == "table" and ("[" .. (last_err.code or "ERROR") .. "] " .. tostring(last_err.message or last_err)) or tostring(last_err)
     error(string.format("[%s] Failed after %d attempts: %s",
-        context or "Retry", max_attempts, tostring(last_err)))
+        context or "Retry", max_attempts, err_msg))
 end
 
 -- Merge retry config from driver config
