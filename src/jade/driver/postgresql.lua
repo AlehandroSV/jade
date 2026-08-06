@@ -1,7 +1,10 @@
 local Driver = require("jade.driver.base")
-local pgmoon = require("pgmoon")
 local Pool = require("jade.driver.pool")
 local Quoting = require("jade.util.quoting")
+
+local function get_pgmoon()
+    return require("pgmoon")
+end
 
 local PostgreSQL = {}
 PostgreSQL.__index = PostgreSQL
@@ -53,7 +56,7 @@ function PostgreSQL:_ensureConnected()
     local retry_config = Retry.getConfig(self._config)
 
     local function connect()
-        local pg = pgmoon.new(self._config)
+        local pg = get_pgmoon().new(self._config)
         if self._config.ssl then
             pg:sslmode("require")
             if self._config.ssl_verify == false then
