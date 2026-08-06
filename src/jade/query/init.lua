@@ -586,13 +586,12 @@ function Query:take(n)
     local q = Query.new(self._entity)
     q._where = self._where
     -- Use driver-appropriate random function
-    local random_fn = "RANDOM()"  -- PostgreSQL, SQLite
+    local random_fn = "RANDOM()"  -- PostgreSQL, SQLite (default)
     local driver = self._entity._driver
-    if driver and driver.class and driver.class.__index then
-        local name = tostring(driver.class)
-        if name:find("MySQL") then
-            random_fn = "RAND()"
-        end
+    if driver and driver._driver_type == "mysql" then
+        random_fn = "RAND()"
+    elseif driver and driver._driver_type == "mariadb" then
+        random_fn = "RAND()"
     end
     q._orderBy = { { column = random_fn, dir = "" } }
     q._select = self._select
