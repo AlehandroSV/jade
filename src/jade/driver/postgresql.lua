@@ -140,7 +140,7 @@ end
 
 -- Transaction methods
 function PostgreSQL:getConnection()
-    local pg = pgmoon.new(self._config)
+    local pg = get_pgmoon().new(self._config)
     if self._config.ssl then
         pg:sslmode("require")
         if self._config.ssl_ca then
