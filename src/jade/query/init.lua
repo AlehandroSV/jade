@@ -264,7 +264,33 @@ function Query:_resolveTimeout()
     return nil
 end
 
+-- Get list of available relation names on the entity
+function Query:_getRelationNames()
+    local names = {}
+    for name in pairs(self._entity._relations) do
+        names[#names + 1] = name
+    end
+    table.sort(names)
+    return names
+end
+
 function Query:_eagerLoad(instances)
+    if #self._includes == 0 then return end
+
+    -- Validate all included relations exist before loading
+    for _, rel_name in ipairs(self._includes) do
+        local relation = self._entity._relations[rel_name]
+        if not relation then
+            local available = table.concat(self:_getRelationNames(), ", ")
+            error(string.format(
+                "Relation '%s' not found on entity '%s'. Available relations: %s",
+                rel_name,
+                self._entity._table,
+                available
+            ))
+        end
+    end
+
     if #instances == 0 then return end
 
     for _, rel_name in ipairs(self._includes) do
