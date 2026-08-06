@@ -74,11 +74,12 @@ function Query:where(condition)
 
             -- Block destructive DDL/DML via semicolon injection
             -- Pattern: ; followed by keyword (Lua patterns use %s for space)
-            if upper:match(";[%s]*DROP[%s(]") or upper:match(";[%s]+DELETE[%s]+FROM") or
+            if upper:match(";[%s]*DROP[%s(]") or upper:match(";[%s]*DELETE[%s]+FROM") or
                upper:match(";[%s]*UPDATE[%s]") or upper:match(";[%s]*ALTER[%s(]") or
                upper:match(";[%s]*TRUNCATE[%s]") or upper:match(";[%s]*INSERT[%s]+INTO") or
                upper:match(";[%s]*GRANT[%s]") or upper:match(";[%s]*REVOKE[%s]") or
-               upper:match(";[%s]*EXECUTE[%s]") or upper:match(";[%s]*CREATE[%s(]") then
+               upper:match(";[%s]*EXECUTE[%s]") or upper:match(";[%s]*EXEC[%s]") or
+               upper:match(";[%s]*CREATE[%s(]") then
                 error("Raw WHERE condition contains forbidden destructive SQL operation")
             end
         end
