@@ -173,6 +173,7 @@ local test_files = {
     "schema/views_spec.lua",
     "entity/events_spec.lua",
     "entity/scopes_spec.lua",
+    "entity/habtm_pivot_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")

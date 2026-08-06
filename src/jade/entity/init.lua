@@ -434,6 +434,41 @@ function Entity:_resolveChildren(relations_data, parentInstance)
             elseif rel.type == "hasAndBelongsToMany" then
                 local driver = self._driver
                 if value.connect then
+                    -- Validate relation identifiers before using them
+                    local join_table = tostring(rel.join_table)
+                    local source_fk = tostring(rel.source_foreign_key)
+                    local target_fk = tostring(rel.target_foreign_key)
+
+                    -- Guard against nil/empty values
+                    if join_table == "" or source_fk == "" or target_fk == "" then
+                        error("HABTM relation '" .. key .. "' has empty join_table or foreign keys")
+                    end
+
+                    -- Validate identifier format to prevent SQL injection via table/column names
+                    local function validate_identifier(name, label)
+                        if not name:match("^[%a_][%w_]*$") then
+                            error(string.format(
+                                "Invalid %s '%s' in HABTM relation '%s'. Must be alphanumeric/underscore starting with letter or underscore.",
+                                label, name, key
+                            ))
+                        end
+                    end
+
+                    validate_identifier(join_table, "join_table name")
+                    validate_identifier(source_fk, "source foreign key")
+                    validate_identifier(target_fk, "target foreign key")
+
+                    -- Use ? placeholders (converted by each driver internally):
+                    --   PostgreSQL → $1, $2
+                    --   MySQL      → :p1, :p2
+                    --   SQLite     → :p1, :p2
+                    local sql = string.format(
+                        "INSERT INTO %s (%s, %s) VALUES (?, ?)",
+                        driver:quoteIdentifier(join_table),
+                        driver:quoteIdentifier(source_fk),
+                        driver:quoteIdentifier(target_fk)
+                    )
+
                     local ids = {}
                     if value.connect.ids then
                         ids = value.connect.ids
@@ -441,11 +476,7 @@ function Entity:_resolveChildren(relations_data, parentInstance)
                         ids = { value.connect.id }
                     end
                     for _, target_id in ipairs(ids) do
-                        driver:execute(
-                            string.format("INSERT INTO %s (%s, %s) VALUES ($1, $2)",
-                                rel.join_table, rel.source_foreign_key, rel.target_foreign_key),
-                            { parentInstance._data.id, target_id }
-                        )
+                        driver:execute(sql, { parentInstance._data.id, target_id })
                     end
                 end
             end
