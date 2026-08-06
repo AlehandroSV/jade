@@ -59,7 +59,12 @@ jobs:
         if: matrix.lua-version == '5.5'
         run: |
           sudo apt-get update
-          sudo apt-get install -y lua5.5
+          sudo apt-get install -y make gcc
+          wget -q https://www.lua.org/ftp/lua-5.5.0.tar.gz -O /tmp/lua.tar.gz
+          tar xzf /tmp/lua.tar.gz -C /tmp
+          cd /tmp/lua-5.5.0 && make linux test
+          sudo cp src/lua /usr/local/bin/lua
+          sudo cp src/luac /usr/local/bin/luac
 
       - name: Install LuaRocks
         if: matrix.lua-version != '5.5'
