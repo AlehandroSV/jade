@@ -80,6 +80,7 @@ build = {
         ["jade.util.log"] = "src/jade/util/log.lua",
         ["jade.util.compat"] = "src/jade/util/compat.lua",
         ["jade.util.quoting"] = "src/jade/util/quoting.lua",
+        ["jade.util.retry"] = "src/jade/util/retry.lua",
         ["jade.i18n"] = "src/jade/i18n/init.lua",
         ["jade.i18n.en"] = "src/jade/i18n/en.lua",
         ["jade.i18n.pt-br"] = "src/jade/i18n/pt-br.lua",

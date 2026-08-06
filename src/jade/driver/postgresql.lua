@@ -48,26 +48,35 @@ end
 
 function PostgreSQL:_ensureConnected()
     if self._conn then return end
-    local pg = pgmoon.new(self._config)
-    if self._config.ssl then
-        pg:sslmode("require")
-        if self._config.ssl_verify == false then
+
+    local Retry = require("jade.util.retry")
+    local retry_config = Retry.getConfig(self._config)
+
+    local function connect()
+        local pg = pgmoon.new(self._config)
+        if self._config.ssl then
             pg:sslmode("require")
+            if self._config.ssl_verify == false then
+                pg:sslmode("require")
+            end
+            if self._config.ssl_ca then
+                pg:sslrootcert(self._config.ssl_ca)
+            end
+            if self._config.ssl_cert then
+                pg:sslcert(self._config.ssl_cert)
+            end
+            if self._config.ssl_key then
+                pg:sslkey(self._config.ssl_key)
+            end
         end
-        if self._config.ssl_ca then
-            pg:sslrootcert(self._config.ssl_ca)
+        local ok, err = pg:connect()
+        if not ok then
+            error("Failed to connect to PostgreSQL: " .. tostring(err))
         end
-        if self._config.ssl_cert then
-            pg:sslcert(self._config.ssl_cert)
-        end
-        if self._config.ssl_key then
-            pg:sslkey(self._config.ssl_key)
-        end
+        return pg
     end
-    local ok, err = pg:connect()
-    if not ok then
-        error("Failed to connect to PostgreSQL: " .. tostring(err))
-    end
+
+    local pg = Retry.execute(connect, retry_config, "PostgreSQL connection")
     self._conn = pg
     self:setEncryptionKey()
 end

@@ -123,26 +123,39 @@ function MySQL:_ensureConnected()
         self._env = mysql.mysql()
     end
 
-    -- Set SSL env vars, connect, then restore (wrapped in pcall for safety)
-    local saved_env = self:_setSSLEnv()
-    local success, result = pcall(function()
-        return self._env:connect(
-            self._config.database,
-            self._config.user,
-            self._config.password,
-            self._config.host,
-            self._config.port
-        )
-    end)
-    self:_restoreSSLEnv(saved_env)
+    local Retry = require("jade.util.retry")
+    local retry_config = Retry.getConfig(self._config)
 
-    if not success then
-        error("Failed to connect to MySQL: " .. tostring(result))
+    -- Save/restore SSL env vars ONCE across all retry attempts (not per-attempt)
+    -- to avoid thrashing global MYSQL_* environment variables between retries.
+    local saved_env = self:_setSSLEnv()
+
+    local function connect()
+        local success, result = pcall(function()
+            return self._env:connect(
+                self._config.database,
+                self._config.user,
+                self._config.password,
+                self._config.host,
+                self._config.port
+            )
+        end)
+        -- Restore SSL env vars on any exit (success or error) within this attempt
+        self:_restoreSSLEnv(saved_env)
+
+        if not success then
+            error("Failed to connect to MySQL: " .. tostring(result))
+        end
+        local conn = result
+        if not conn then
+            error("Failed to connect to MySQL: nil returned")
+        end
+        return conn
     end
-    local conn = result
-    if not conn then
-        error("Failed to connect to MySQL: nil returned")
-    end
+
+    local conn = Retry.execute(connect, retry_config, "MySQL connection")
+    -- Final restore ensures clean state even if Retry.execute propagates an error
+    self:_restoreSSLEnv(saved_env)
     self._conn = conn
     self:setEncryptionKey()
 end
