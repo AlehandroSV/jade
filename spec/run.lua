@@ -147,6 +147,7 @@ local test_files = {
     "schema/declarative_spec.lua",
     "query/expression_spec.lua",
     "query/condition_spec.lua",
+    "query/eager_loading_spec.lua",
     "query/paginate_spec.lua",
     "entity/entity_spec.lua",
     "entity/instance_spec.lua",
