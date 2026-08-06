@@ -515,7 +515,7 @@ Jade supports two encryption modes: **database-native** (recommended for product
 Uses the database's built-in encryption functions. Requires PostgreSQL with pgcrypto extension or MySQL.
 
 ```lua
--- Configure encryption with a secret key
+-- Configure global encryption key (legacy API — still works)
 jade.Encryption.configure({ key = "my-secret-key" })
 
 -- PostgreSQL: install pgcrypto extension first
@@ -530,14 +530,42 @@ local User = jade.Entity("users", {
 })
 
 -- Values are encrypted in the database (not in Lua)
--- PostgreSQL: pgp_sym_encrypt/column, key
+-- PostgreSQL: pgp_sym_encrypt(column, key)
 -- MySQL: AES_ENCRYPT(column, key)
 -- Decryption happens automatically on SELECT
 ```
 
+#### Per-Entity Encryption Configuration
+
+For multiple entities with different encryption keys, configure each entity individually:
+
+```lua
+local AdminUser = jade.Entity("admin_users", {
+    id = jade.Integer():primaryKey(),
+    name = jade.String(120):encrypted(),
+}, {
+    encryption = { key = "admin-key-123", algorithm = "aes" }
+})
+
+local Payment = jade.Entity("payments", {
+    id = jade.Integer():primaryKey(),
+    card_number = jade.String(19):encrypted(),
+}, {
+    encryption = { key = "payment-key-456", algorithm = "aes" }
+})
+
+-- Each entity can have its own encryption key
+-- NOTE: When using database-native (AES) mode, each entity with a different key
+-- requires a separate database connection, since the driver sets one key per session variable.
+```
+
+**Important limitation:** In **database-native (AES)** mode, all encrypted queries on the same connection share a single session variable (`jade.encryption_key` / `@jade_encryption_key`). If you need different keys for different entities:
+- Use separate database connections for each entity/key pair, or
+- Use **Custom encryption** mode (see below) where decryption happens in Lua per value.
+
 #### Custom Encryption (User-Provided Functions)
 
-Provide your own encrypt/decrypt functions. Works with any database including SQLite.
+Provide your own encrypt/decrypt functions. Works with any database including SQLite, and is recommended when you need multiple keys without managing connections.
 
 ```lua
 -- Option 1: Inline functions
@@ -596,6 +624,7 @@ end
 #### Encryption Configuration Options
 
 ```lua
+-- Global configuration (legacy API — affects all entities without per-entity config)
 jade.Encryption.configure({
     key = "secret",                    -- Encryption key (required)
     algorithm = "aes" | "custom",      -- "aes" for DB-native, "custom" for Lua functions
@@ -609,6 +638,21 @@ jade.Encryption.configure({
     encrypt_file = "path/to/encrypt.lua",  -- Custom encrypt function (from file)
     decrypt_file = "path/to/decrypt.lua",  -- Custom decrypt function (from file)
 })
+
+-- Per-entity configuration (recommended — each entity gets its own key)
+local User = jade.Entity("users", {
+    id = jade.Integer():primaryKey(),
+    email = jade.String(255):encrypted(),
+}, {
+    encryption = {
+        key = "user-encryption-key",   -- Entity-specific key
+        algorithm = "aes" | "custom",
+        -- ... same options as configure() above
+    }
+})
+
+-- When both global and per-entity configs exist, calling configure()
+-- will emit a warning that it does not override per-entity settings.
 ```
 
 ### Query Caching
