@@ -249,6 +249,8 @@ User:where(User.id:isIn(activeUsers)):get()
 User:where(jade.raw("age > ? OR active = ?", 18, true)):get()
 ```
 
+**⚠️ Warning:** `jade.raw()` is an escape hatch — it bypasses Jade's query builder safety features. The validation layer blocks known dangerous patterns (UNION SELECT, DROP TABLE, DELETE FROM, UPDATE via injection, ALTER, TRUNCATE, CREATE, GRANT, REVOKE), but **it does not provide complete SQL injection protection**. Always use bindings (`?`) for values and avoid raw SQL in production when possible.
+
 ### Query Convenience Methods
 
 ```lua

@@ -62,9 +62,26 @@ function Query:where(condition)
         if type(raw_sql) ~= "string" then
             error("Raw condition SQL must be a string")
         end
-        local upper = raw_sql:upper()
-        if upper:match("UNION%s+ALL%s+SELECT") or upper:match("UNION%s+SELECT") then
-            error("Raw WHERE condition does not allow UNION SELECT")
+
+        -- Only validate when we have an actual string (some callers may pass other types)
+        if type(raw_sql) == "string" and #raw_sql > 0 then
+            local upper = raw_sql:upper()
+
+            -- Block UNION/UNION ALL SELECT — prevents result-set manipulation
+            if upper:match("UNION%s+ALL%s+SELECT") or upper:match("UNION%s+SELECT") then
+                error("Raw WHERE condition does not allow UNION SELECT")
+            end
+
+            -- Block destructive DDL/DML via semicolon injection
+            -- Pattern: ; followed by keyword (Lua patterns use %s for space)
+            if upper:match(";[%s]*DROP[%s(]") or upper:match(";[%s]*DELETE[%s]+FROM") or
+               upper:match(";[%s]*UPDATE[%s]") or upper:match(";[%s]*ALTER[%s(]") or
+               upper:match(";[%s]*TRUNCATE[%s]") or upper:match(";[%s]*INSERT[%s]+INTO") or
+               upper:match(";[%s]*GRANT[%s]") or upper:match(";[%s]*REVOKE[%s]") or
+               upper:match(";[%s]*EXECUTE[%s]") or upper:match(";[%s]*EXEC[%s]") or
+               upper:match(";[%s]*CREATE[%s(]") then
+                error("Raw WHERE condition contains forbidden destructive SQL operation")
+            end
         end
 
         condition = {

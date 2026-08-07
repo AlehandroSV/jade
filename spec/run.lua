@@ -168,6 +168,7 @@ local test_files = {
     "security/sanitizer_spec.lua",
     "security/validator_spec.lua",
     "security/escape_spec.lua",
+    "query/raw_spec.lua",
             "introspection/converter_spec.lua",
         "errors/errors_spec.lua",
     "schema/views_spec.lua",
