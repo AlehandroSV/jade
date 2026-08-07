@@ -102,8 +102,10 @@ function PostgreSQL:closeConnection(conn)
     end
 end
 
--- Set encryption key as session variable to avoid exposing it in SQL strings
--- Uses parameterized query to prevent key exposure in SET statement itself
+-- Set encryption key as session variable on connection
+-- NOTE: Uses global config for connection-level key. Per-entity configs require
+-- separate DB connections in AES/native mode (one key per connection session).
+-- Custom encryption bypasses this limitation (Lua-level decryption).
 function PostgreSQL:setEncryptionKey(conn)
     conn = conn or self._conn
     local Encryption = require("jade.encryption")
@@ -282,7 +284,9 @@ function PostgreSQL:generateSelect(query)
         sql[#sql + 1] = select_prefix .. " " .. table.concat(resolved, ", ")
     else
         -- SELECT * with decryption for encrypted columns
-        if Encryption.isEnabled() then
+        local Encryption = require("jade.encryption")
+        local entity_enabled = entity_name and Encryption.isEntityEnabled(entity_name) or Encryption.isEnabled()
+        if entity_enabled then
             local fields = Encryption.getEncryptedFields(entity_name, columns)
             local has_encrypted = false
             for _ in pairs(fields) do has_encrypted = true; break end
@@ -407,11 +411,12 @@ function PostgreSQL:generateInsert(table_name, data, entity)
     local i = 1
 
     local Encryption = require("jade.encryption")
+    local entity_enabled = entity_name and Encryption.isEntityEnabled(entity_name) or Encryption.isEnabled()
     local encrypt_cols = entity and entity._encrypt_cols or {}
 
     for key, value in pairs(data) do
         columns[#columns + 1] = Quoting.quoteIdentifier(key)
-        if encrypt_cols[key] and Encryption.isEnabled() then
+        if encrypt_cols[key] and entity_enabled then
             -- Use pgcrypto encryption function with session variable
             placeholders[#placeholders + 1] = "pgp_sym_encrypt($" .. i .. "::text, current_setting('jade.encryption_key'))"
         else
@@ -581,10 +586,11 @@ function PostgreSQL:generateUpdate(table_name, data, where, entity)
     local i = 1
 
     local Encryption = require("jade.encryption")
+    local entity_enabled = entity_name and Encryption.isEntityEnabled(entity_name) or Encryption.isEnabled()
     local encrypt_cols = entity and entity._encrypt_cols or {}
 
     for key, value in pairs(data) do
-        if encrypt_cols[key] and Encryption.isEnabled() then
+        if encrypt_cols[key] and entity_enabled then
             set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = pgp_sym_encrypt($" .. i .. "::text, current_setting('jade.encryption_key'))"
         else
             set_parts[#set_parts + 1] = Quoting.quoteIdentifier(key) .. " = $" .. i
