@@ -74,13 +74,19 @@ function Query:where(condition)
 
             -- Block destructive DDL/DML via semicolon injection
             -- Pattern: ; followed by keyword (Lua patterns use %s for space)
-            if upper:match(";[%s]*DROP[%s(]") or upper:match(";[%s]*DELETE[%s]+FROM") or
-               upper:match(";[%s]*UPDATE[%s]") or upper:match(";[%s]*ALTER[%s(]") or
-               upper:match(";[%s]*TRUNCATE[%s]") or upper:match(";[%s]*INSERT[%s]+INTO") or
-               upper:match(";[%s]*GRANT[%s]") or upper:match(";[%s]*REVOKE[%s]") or
-               upper:match(";[%s]*EXECUTE[%s]") or upper:match(";[%s]*EXEC[%s]") or
-               upper:match(";[%s]*CREATE[%s(]") then
-                error("Raw WHERE condition contains forbidden destructive SQL operation")
+            local bad_kw = upper:match(";[%s]*DROP[%s(]") and "DROP" or
+                           upper:match(";[%s]*DELETE[%s]+FROM") and "DELETE" or
+                           upper:match(";[%s]*UPDATE[%s]") and "UPDATE" or
+                           upper:match(";[%s]*ALTER[%s(]") and "ALTER" or
+                           upper:match(";[%s]*TRUNCATE[%s]") and "TRUNCATE" or
+                           upper:match(";[%s]*INSERT[%s]+INTO") and "INSERT" or
+                           upper:match(";[%s]*CREATE[%s(]") and "CREATE" or
+                           upper:match(";[%s]*GRANT[%s]") and "GRANT" or
+                           upper:match(";[%s]*REVOKE[%s]") and "REVOKE" or
+                           upper:match(";[%s]*EXECUTE[%s]") and "EXECUTE" or
+                           upper:match(";[%s]*EXEC[%s]") and "EXEC"
+            if bad_kw then
+                error("Raw WHERE condition does not allow '" .. bad_kw .. "' statements")
             end
         end
 
@@ -670,13 +676,12 @@ function Query:take(n)
     local q = Query.new(self._entity)
     q._where = self._where
     -- Use driver-appropriate random function
-    local random_fn = "RANDOM()"  -- PostgreSQL, SQLite
+    local random_fn = "RANDOM()"  -- PostgreSQL, SQLite (default)
     local driver = self._entity._driver
-    if driver and driver.class and driver.class.__index then
-        local name = tostring(driver.class)
-        if name:find("MySQL") then
-            random_fn = "RAND()"
-        end
+    if driver and driver._driver_type == "mysql" then
+        random_fn = "RAND()"
+    elseif driver and driver._driver_type == "mariadb" then
+        random_fn = "RAND()"
     end
     q._orderBy = { { column = random_fn, dir = "" } }
     q._select = self._select
