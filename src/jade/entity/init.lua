@@ -103,6 +103,10 @@ end
 
 -- Relation definitions
 function Entity:belongsTo(target_entity, options)
+    options = options or {}
+    if not options.foreign_key and self._table == target_entity._table then
+        error("Self-referential belongsTo requires an explicit foreign_key to avoid FK collision. Example: { foreign_key = 'parent_id' }")
+    end
     local relation = Relations.belongsTo(target_entity, options)
     local tableName, entityName = entityRelKey(target_entity)
     self._relations[tableName] = relation

@@ -22,6 +22,9 @@ function Relations.hasMany(source_entity, target_entity, options)
     options = options or {}
     local foreign_key = options.foreign_key
     if not foreign_key then
+        if source_entity._table == target_entity._table then
+            error("Self-referential hasMany requires an explicit foreign_key to avoid FK collision. Example: { foreign_key = 'parent_id' }")
+        end
         local inflection = require("jade.util.inflection")
         foreign_key = inflection.singularize(source_entity._table) .. "_id"
     end
@@ -38,6 +41,9 @@ function Relations.hasOne(source_entity, target_entity, options)
     options = options or {}
     local foreign_key = options.foreign_key
     if not foreign_key then
+        if source_entity._table == target_entity._table then
+            error("Self-referential hasOne requires an explicit foreign_key to avoid FK collision. Example: { foreign_key = 'parent_id' }")
+        end
         local inflection = require("jade.util.inflection")
         foreign_key = inflection.singularize(source_entity._table) .. "_id"
     end
