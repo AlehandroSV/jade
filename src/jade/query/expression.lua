@@ -107,7 +107,7 @@ function Expression.raw(sql, ...)
     local upper = sql:upper()
     -- Block multi-statement (semicolons)
     -- Allow semicolons inside string literals but not as statement separators
-    if sql:match(";%s*[A-Z]") and not sql:match("';'.*;'") then
+    if upper:match(";%s*[A-Z]") and not upper:match("';'.*;'") then
         -- Only block if semicolon is not inside a quoted string
         local stripped = sql:gsub("'[^']*'", ""):gsub('"[^"]*"', "")
         if stripped:match(";") then
