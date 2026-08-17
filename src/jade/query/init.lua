@@ -27,7 +27,32 @@ function Query.new(entity)
         _timeout = nil,
         _include_trashed = false,
         _only_trashed = false,
+        _where_explicit = false,
     }, Query)
+end
+
+--- Deep-copy mutable array fields from source into dest Query.
+local function _copyArrays(src, dst)
+    if not src or not dst then return end
+    for _, key in ipairs({ "_where", "_orderBy", "_select", "_bindings", "_joins", "_groupBy", "_having" }) do
+        local v = src[key]
+        if type(v) == "table" then
+            dst[key] = {}
+            for i = 1, #v do dst[key][i] = v[i] end
+        end
+    end
+end
+
+--- Clone scalar fields from source into dest Query.
+local function _copyScalars(src, dst)
+    dst._entity = src._entity; dst._table = src._table
+    dst._limit = src._limit; dst._offset = src._offset
+    dst._includes = src._includes; dst._distinct = src._distinct
+    dst._cache_ttl = src._cache_ttl; dst._cache_key = src._cache_key
+    dst._timeout = src._timeout
+    dst._include_trashed = src._include_trashed
+    dst._only_trashed = src._only_trashed
+    dst._where_explicit = src._where_explicit
 end
 
 -- Set query timeout in milliseconds
@@ -102,6 +127,7 @@ function Query:where(condition)
             end,
         }
     end
+    self._where_explicit = true
     self._where[#self._where + 1] = condition
     return self
 end
@@ -508,133 +534,60 @@ end
 
 function Query:first()
     local q = Query.new(self._entity)
-    q._where = self._where
-    q._orderBy = self._orderBy
-    q._select = self._select
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
+    _copyArrays(self, q); _copyScalars(self, q)
     q._limit = 1
-    q._offset = self._offset
-    q._timeout = self._timeout
-    q._include_trashed = self._include_trashed
-    q._only_trashed = self._only_trashed
-    local results = q:get()
-    return results[1]
+    return q:get()[1]
 end
 
 function Query:find(id)
     local q = Query.new(self._entity)
+    _copyArrays(self, q); _copyScalars(self, q)
     q._where = { Condition.new("id", "=", id, self._table) }
-    q._orderBy = self._orderBy
-    q._select = self._select
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
     q._limit = 1
-    q._offset = self._offset
     q._timeout = self._timeout
     q._include_trashed = self._include_trashed
     q._only_trashed = self._only_trashed
-    local results = q:get()
-    return results[1]
+    return q:get()[1]
 end
 
 function Query:count()
     local q = Query.new(self._entity)
-    q._where = self._where
-    q._orderBy = self._orderBy
+    _copyArrays(self, q); _copyScalars(self, q)
     q._select = { "COUNT(*) as count" }
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
-    q._limit = self._limit
-    q._offset = self._offset
-    q._timeout = self._timeout
-    q._include_trashed = self._include_trashed
-    q._only_trashed = self._only_trashed
     local sql, bindings = q:toSQL()
-    local driver = self._entity._driver
-    local result = driver:execute(sql, bindings)
-    return result[1] and result[1].count or 0
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].count or 0
 end
 
 function Query:sum(column)
     local q = Query.new(self._entity)
-    q._where = self._where
-    q._orderBy = self._orderBy
+    _copyArrays(self, q); _copyScalars(self, q)
     q._select = { "SUM(" .. Quoting.quoteIdentifier(column) .. ") as sum" }
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
-    q._limit = self._limit
-    q._offset = self._offset
     local sql, bindings = q:toSQL()
-    local driver = self._entity._driver
-    local result = driver:execute(sql, bindings)
-    return result[1] and result[1].sum or 0
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].sum or 0
 end
 
 function Query:average(column)
     local q = Query.new(self._entity)
-    q._where = self._where
-    q._orderBy = self._orderBy
+    _copyArrays(self, q); _copyScalars(self, q)
     q._select = { "AVG(" .. Quoting.quoteIdentifier(column) .. ") as avg" }
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
-    q._limit = self._limit
-    q._offset = self._offset
     local sql, bindings = q:toSQL()
-    local driver = self._entity._driver
-    local result = driver:execute(sql, bindings)
-    return result[1] and result[1].avg or 0
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].avg or 0
 end
 
 function Query:min(column)
     local q = Query.new(self._entity)
-    q._where = self._where
-    q._orderBy = self._orderBy
+    _copyArrays(self, q); _copyScalars(self, q)
     q._select = { "MIN(" .. Quoting.quoteIdentifier(column) .. ") as min" }
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
-    q._limit = self._limit
-    q._offset = self._offset
     local sql, bindings = q:toSQL()
-    local driver = self._entity._driver
-    local result = driver:execute(sql, bindings)
-    return result[1] and result[1].min or 0
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].min or 0
 end
 
 function Query:max(column)
     local q = Query.new(self._entity)
-    q._where = self._where
-    q._orderBy = self._orderBy
+    _copyArrays(self, q); _copyScalars(self, q)
     q._select = { "MAX(" .. Quoting.quoteIdentifier(column) .. ") as max" }
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
-    q._limit = self._limit
-    q._offset = self._offset
     local sql, bindings = q:toSQL()
-    local driver = self._entity._driver
-    local result = driver:execute(sql, bindings)
-    return result[1] and result[1].max or 0
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].max or 0
 end
 
 function Query:paginate(options)
@@ -652,46 +605,24 @@ end
 
 function Query:pluck(column)
     local q = Query.new(self._entity)
-    q._where = self._where
-    q._orderBy = self._orderBy
+    _copyArrays(self, q); _copyScalars(self, q)
     q._select = { Quoting.quoteIdentifier(column) }
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
-    q._limit = self._limit
-    q._offset = self._offset
     local sql, bindings = q:toSQL()
-    local driver = self._entity._driver
-    local result = driver:execute(sql, bindings)
+    local result = self._entity._driver:execute(sql, bindings)
     local values = {}
-    for i, row in ipairs(result) do
-        values[i] = row[column]
-    end
+    for i, row in ipairs(result) do values[i] = row[column] end
     return values
 end
 
 function Query:take(n)
     local q = Query.new(self._entity)
-    q._where = self._where
-    -- Use driver-appropriate random function
-    local random_fn = "RANDOM()"  -- PostgreSQL, SQLite (default)
+    _copyArrays(self, q); _copyScalars(self, q)
+    local random_fn = "RANDOM()"
     local driver = self._entity._driver
-    if driver and driver._driver_type == "mysql" then
-        random_fn = "RAND()"
-    elseif driver and driver._driver_type == "mariadb" then
-        random_fn = "RAND()"
-    end
+    if driver and driver._driver_type == "mysql" then random_fn = "RAND()"
+    elseif driver and driver._driver_type == "mariadb" then random_fn = "RAND()" end
     q._orderBy = { { column = random_fn, dir = "" } }
-    q._select = self._select
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
     q._limit = n
-    q._offset = nil
     return q:get()
 end
 
@@ -699,20 +630,11 @@ function Query:inBatches(batchSize, fn)
     local offset = 0
     while true do
         local q = Query.new(self._entity)
-        q._where = self._where
-        q._orderBy = self._orderBy
-        q._select = self._select
-        q._includes = self._includes
-        q._joins = self._joins
-        q._groupBy = self._groupBy
-        q._having = self._having
-        q._distinct = self._distinct
-        q._limit = batchSize
-        q._offset = offset
+        _copyArrays(self, q); _copyScalars(self, q)
+        q._limit = batchSize; q._offset = offset
         local batch = q:get()
         if #batch == 0 then break end
-        fn(batch)
-        offset = offset + batchSize
+        fn(batch); offset = offset + batchSize
         if #batch < batchSize then break end
     end
 end
@@ -725,6 +647,9 @@ function Query:as(alias)
 end
 
 function Query:updateAll(data)
+    if not self._where_explicit then
+        error("updateAll() requires an explicit .where() filter to prevent accidental full-table update. Use .where(...) before calling .updateAll().")
+    end
     local driver = self._entity._driver
     local where = self:_compileWhere()
     local sql, bindings = driver:generateBulkUpdate(self._table, data, where)
@@ -733,6 +658,9 @@ function Query:updateAll(data)
 end
 
 function Query:deleteAll()
+    if not self._where_explicit then
+        error("deleteAll() requires an explicit .where() filter to prevent accidental full-table delete. Use .where(...) before calling .deleteAll().")
+    end
     local driver = self._entity._driver
     local where = self:_compileWhere()
     local sql, bindings = driver:generateBulkDelete(self._table, where)
@@ -758,22 +686,30 @@ function Query:_compileWhere()
 end
 
 function Query:toSQL()
-    -- Apply soft delete filter if entity has soft delete enabled
+    -- Apply soft delete filter WITHOUT mutating self._where permanently
     local SoftDelete = require("jade.entity.soft_delete")
-    if SoftDelete.isSoftDeleted(self._entity) and not self._include_trashed then
-        local col = SoftDelete.getSoftDeleteColumn(self._entity)
-        if self._only_trashed then
-            -- Only return soft-deleted records
-            self._where[#self._where + 1] = Condition.new(col, "IS NOT", nil, self._table)
-        else
-            -- Exclude soft-deleted records (default behavior)
-            self._where[#self._where + 1] = Condition.new(col, "IS", nil, self._table)
-        end
+    if not (SoftDelete.isSoftDeleted(self._entity) and not self._include_trashed) then
+        local driver = self._entity._driver
+        local sql, bindings = driver:generateSelect(self)
+        Security.validateQuery(sql, bindings)
+        return sql, bindings
+    end
+
+    local orig_where = self._where
+    self._where = {}
+    for i = 1, #orig_where do self._where[i] = orig_where[i] end
+
+    local col = SoftDelete.getSoftDeleteColumn(self._entity)
+    if self._only_trashed then
+        self._where[#self._where + 1] = Condition.new(col, "IS NOT", nil, self._table)
+    else
+        self._where[#self._where + 1] = Condition.new(col, "IS", nil, self._table)
     end
 
     local driver = self._entity._driver
     local sql, bindings = driver:generateSelect(self)
     Security.validateQuery(sql, bindings)
+    self._where = orig_where
     return sql, bindings
 end
 
