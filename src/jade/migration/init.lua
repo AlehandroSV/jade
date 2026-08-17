@@ -41,6 +41,7 @@ function M.migrate(driver)
 
     -- Run pending migrations
     local results = {}
+    local applied_names = {}
     for _, f in ipairs(pending) do
         print("Applying: " .. f.name)
         local migration = file.load(f.path)
@@ -49,15 +50,23 @@ function M.migrate(driver)
         end)
 
         if ok then
-            -- Record migration only after successful commit
-            tracker.recordMigration(driver, f.name)
+            applied_names[#applied_names + 1] = f.name
             results[#results + 1] = { name = f.name, success = true }
             print("  Applied: " .. f.name)
         else
             results[#results + 1] = { name = f.name, success = false, error = err }
             print("  Failed: " .. f.name .. "\n  Error: " .. tostring(err))
+            -- Record all successful migrations before stopping
+            for _, name in ipairs(applied_names) do
+                tracker.recordMigration(driver, name)
+            end
             error("Migration failed: " .. f.name)
         end
+    end
+
+    -- Record all successful migrations after all complete
+    for _, name in ipairs(applied_names) do
+        tracker.recordMigration(driver, name)
     end
 
     return results
@@ -75,6 +84,9 @@ function M.rollback(driver, steps)
     end
 
     local results = {}
+    local rolled_back = {}
+    local first_error = nil
+
     for _, name in ipairs(last_applied) do
         print("Rolling back: " .. name)
         local path = "migrations/" .. name
@@ -84,15 +96,25 @@ function M.rollback(driver, steps)
         end)
 
         if ok then
-            -- Remove migration record only after successful rollback
-            tracker.removeMigration(driver, name)
+            rolled_back[#rolled_back + 1] = name
             results[#results + 1] = { name = name, success = true }
             print("  Rolled back: " .. name)
         else
             results[#results + 1] = { name = name, success = false, error = err }
             print("  Failed: " .. name .. "\n  Error: " .. tostring(err))
-            error("Rollback failed: " .. name)
+            if not first_error then
+                first_error = "Rollback failed: " .. name
+            end
         end
+    end
+
+    -- Remove tracker records for ALL successful rollbacks
+    for _, name in ipairs(rolled_back) do
+        tracker.removeMigration(driver, name)
+    end
+
+    if first_error then
+        error(first_error)
     end
 
     return results
