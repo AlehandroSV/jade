@@ -156,6 +156,7 @@ local test_files = {
     "entity/proxy_spec.lua",
     "entity/soft_delete_spec.lua",
     "query/builder_spec.lua",
+    "query/exists_spec.lua",
     "driver/postgresql_spec.lua",
     "driver/mysql_spec.lua",
     "driver/sqlite_spec.lua",

@@ -314,7 +314,7 @@ function Entity:paginate(options)
 end
 
 function Entity:exists(options)
-    return self:count(options) > 0
+    return Query.new(self):exists()
 end
 
 function Entity:empty()

@@ -643,7 +643,13 @@ function Query:paginate(options)
 end
 
 function Query:exists()
-    return self:count() > 0
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._select = { "1" }
+    q._limit = 1
+    local sql, bindings = q:toSQL()
+    local result = self._entity._driver:execute(sql, bindings)
+    return #result > 0
 end
 
 function Query:empty()
