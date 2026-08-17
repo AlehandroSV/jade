@@ -170,6 +170,7 @@ local test_files = {
     "driver/sqlite_spec.lua",
     "driver/pool_spec.lua",
     "driver/mariadb_spec.lua",
+    "driver/openresty_spec.lua",
     "migration/tracker_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
