@@ -164,6 +164,7 @@ local test_files = {
     "migration/tracker_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
+    "migration/file_spec.lua",
     "transaction/transaction_spec.lua",
     "i18n/i18n_spec.lua",
     "security/sanitizer_spec.lua",

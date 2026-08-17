@@ -4,6 +4,14 @@ local function getMigrationsDir()
     return "migrations"
 end
 
+local function sanitizePath(path)
+    -- Only allow alphanumeric, underscores, hyphens, dots, slashes, and colons (for Windows drives)
+    if not path:match("^[a-zA-Z0-9_%./\\:%-]+$") then
+        error("Invalid path: contains unsafe characters")
+    end
+    return path
+end
+
 function M.listFiles()
     local dir = getMigrationsDir()
     local files = {}
@@ -25,7 +33,8 @@ function M.listFiles()
         end
     else
         -- Fallback: try platform commands (ls on Linux, dir on Windows)
-        local handle = io.popen('ls "' .. dir .. '" 2>/dev/null')
+        local safe_dir = sanitizePath(dir)
+        local handle = io.popen('ls "' .. safe_dir .. '" 2>/dev/null')
         if handle then
             local first = handle:read("*l")
             if first then
@@ -52,7 +61,7 @@ function M.listFiles()
 
         if #files == 0 then
             -- Try Windows dir command
-            handle = io.popen('dir "' .. dir .. '" /b 2>nul')
+            handle = io.popen('dir "' .. safe_dir .. '" /b 2>nul')
             if handle then
                 for filename in handle:lines() do
                     if filename:match("%.lua$") then
