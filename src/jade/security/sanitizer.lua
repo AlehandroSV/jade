@@ -58,15 +58,7 @@ function M.detectSQLInjection(input)
     -- Check for dangerous keywords followed by space (not part of a word)
     for _, keyword in ipairs(DANGEROUS_KEYWORDS) do
         if upper:match(keyword .. "%s") or upper:match(keyword .. "$") then
-            -- Allow if it's inside a string literal (between quotes)
-            local before = upper:sub(1, upper:find(keyword) - 1)
-            local quote_count = 0
-            for _ in before:gmatch("'") do
-                quote_count = quote_count + 1
-            end
-            if quote_count % 2 == 0 then
-                return true, "Dangerous SQL keyword detected: " .. keyword
-            end
+            return true, "Dangerous SQL keyword detected: " .. keyword
         end
     end
 
