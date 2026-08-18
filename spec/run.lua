@@ -187,6 +187,7 @@ local test_files = {
     "entity/habtm_pivot_spec.lua",
     "query/take_spec.lua",
     "query/safe_bulk_spec.lua",
+    "util/log_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")
