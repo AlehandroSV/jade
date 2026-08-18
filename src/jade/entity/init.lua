@@ -314,7 +314,14 @@ function Entity:paginate(options)
 end
 
 function Entity:exists(options)
-    return self:count(options) > 0
+    local q = Query.new(self)
+    if options and options.where then
+        local Condition = require("jade.query.condition")
+        for k, v in pairs(options.where) do
+            q = q:where(Condition.new(k, "=", v, self._table))
+        end
+    end
+    return q:exists()
 end
 
 function Entity:empty()
