@@ -147,6 +147,7 @@ assert = M.assert
 
 -- Load and run test files
 local test_files = {
+    "config_spec.lua",
     "types/column_spec.lua",
     "types/types_spec.lua",
     "types/luals_spec.lua",
