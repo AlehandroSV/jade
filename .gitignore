@@ -4,6 +4,7 @@
 !spec/**/*.lua
 !fixtures/**/*.lua
 !bench/**/*.lua
+!migrations/**/*.lua
 
 # LuaRocks
 *.rock
