@@ -132,6 +132,12 @@ M.assert.has_error = function(fn)
         error("Expected error, but no error was raised", 3)
     end
 end
+M.assert.has_no_error = function(fn)
+    local ok, err = pcall(fn)
+    if not ok then
+        error("Expected no error, but got: " .. tostring(err), 3)
+    end
+end
 
 -- Make available globally for test files
 describe = M.describe
@@ -177,6 +183,7 @@ local test_files = {
     "entity/scopes_spec.lua",
     "entity/habtm_pivot_spec.lua",
     "query/take_spec.lua",
+    "query/safe_bulk_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")
