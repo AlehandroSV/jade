@@ -111,7 +111,37 @@ describe("Query:exists() optimization", function()
             name = String(100),
             status = String(20),
         })
-        User._driver = mock_driver
+        local where_driver = {
+            execute = function(self, sql, bindings)
+                captured_sql = sql
+                return { { id = 1 } }
+            end,
+            generateSelect = function(self, query)
+                local sql_parts = {}
+                if #query._select > 0 then
+                    sql_parts[#sql_parts + 1] = "SELECT " .. table.concat(query._select, ", ")
+                else
+                    sql_parts[#sql_parts + 1] = "SELECT *"
+                end
+                sql_parts[#sql_parts + 1] = "FROM " .. query._table
+                if #query._where > 0 then
+                    sql_parts[#sql_parts + 1] = "WHERE"
+                    for i, cond in ipairs(query._where) do
+                        local sql, bindings = cond:compile({})
+                        if i > 1 then
+                            sql_parts[#sql_parts + 1] = "AND " .. sql
+                        else
+                            sql_parts[#sql_parts + 1] = sql
+                        end
+                    end
+                end
+                if query._limit then
+                    sql_parts[#sql_parts + 1] = "LIMIT " .. tostring(query._limit)
+                end
+                return table.concat(sql_parts, " "), {}
+            end,
+        }
+        User._driver = where_driver
 
         User:exists({ where = { status = "active" } })
 
