@@ -104,4 +104,18 @@ describe("Query:exists() optimization", function()
         local result = User:exists()
         assert.is_false(result)
     end)
+
+    it("passes where options to query", function()
+        local User = Entity.new("users", {
+            id = Integer():primaryKey(),
+            name = String(100),
+            status = String(20),
+        })
+        User._driver = mock_driver
+
+        User:exists({ where = { status = "active" } })
+
+        assert.is_truthy(captured_sql)
+        assert.is_truthy(string.find(captured_sql, "status"))
+    end)
 end)
