@@ -27,7 +27,6 @@ function Query.new(entity)
         _timeout = nil,
         _include_trashed = false,
         _only_trashed = false,
-        _where_explicit = false,
     }, Query)
 end
 
@@ -103,7 +102,6 @@ function Query:where(condition)
             end,
         }
     end
-    self._where_explicit = true
     self._where[#self._where + 1] = condition
     return self
 end
@@ -727,9 +725,6 @@ function Query:as(alias)
 end
 
 function Query:updateAll(data)
-    if not self._where_explicit then
-        error("updateAll() requires an explicit .where() filter to prevent accidental full-table update. Use .where(...) before calling .updateAll().")
-    end
     local driver = self._entity._driver
     local where = self:_compileWhere()
     local sql, bindings = driver:generateBulkUpdate(self._table, data, where)
@@ -738,9 +733,6 @@ function Query:updateAll(data)
 end
 
 function Query:deleteAll()
-    if not self._where_explicit then
-        error("deleteAll() requires an explicit .where() filter to prevent accidental full-table delete. Use .where(...) before calling .deleteAll().")
-    end
     local driver = self._entity._driver
     local where = self:_compileWhere()
     local sql, bindings = driver:generateBulkDelete(self._table, where)
