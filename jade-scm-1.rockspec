@@ -105,5 +105,16 @@ build = {
         ["jade.audit"] = "src/jade/audit/init.lua",
         ["jade.seed"] = "src/jade/seed/init.lua",
         ["jade.test.helpers"] = "src/jade/test/helpers.lua",
+        -- Plugin system (issue #93)
+        ["jade.plugin"] = "src/jade/plugin/init.lua",
+        ["jade.plugin.loader"] = "src/jade/plugin/loader.lua",
+        ["jade.plugin.base"] = "src/jade/plugin/base.lua",
+        ["jade.plugin.hooks"] = "src/jade/plugin/hooks.lua",
+        ["jade.plugin.soft_delete"] = "src/jade/plugin/soft_delete.lua",
+        ["jade.plugin.callbacks"] = "src/jade/plugin/callbacks.lua",
+        ["jade.plugin.optimistic_lock"] = "src/jade/plugin/optimistic_lock.lua",
+        ["jade.plugin.audit"] = "src/jade/plugin/audit.lua",
+        ["jade.plugin.encryption"] = "src/jade/plugin/encryption.lua",
+        ["jade.plugin.cache"] = "src/jade/plugin/cache.lua",
     }
 }
