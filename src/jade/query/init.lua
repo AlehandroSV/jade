@@ -62,9 +62,32 @@ function Query:where(condition)
         if type(raw_sql) ~= "string" then
             error("Raw condition SQL must be a string")
         end
-        local upper = raw_sql:upper()
-        if upper:match("UNION%s+ALL%s+SELECT") or upper:match("UNION%s+SELECT") then
-            error("Raw WHERE condition does not allow UNION SELECT")
+
+        -- Only validate when we have an actual string (some callers may pass other types)
+        if type(raw_sql) == "string" and #raw_sql > 0 then
+            local upper = raw_sql:upper()
+
+            -- Block UNION/UNION ALL SELECT — prevents result-set manipulation
+            if upper:match("UNION%s+ALL%s+SELECT") or upper:match("UNION%s+SELECT") then
+                error("Raw WHERE condition does not allow UNION SELECT")
+            end
+
+            -- Block destructive DDL/DML via semicolon injection
+            -- Pattern: ; followed by keyword (Lua patterns use %s for space)
+            local bad_kw = upper:match(";[%s]*DROP[%s(]") and "DROP" or
+                           upper:match(";[%s]*DELETE[%s]+FROM") and "DELETE" or
+                           upper:match(";[%s]*UPDATE[%s]") and "UPDATE" or
+                           upper:match(";[%s]*ALTER[%s(]") and "ALTER" or
+                           upper:match(";[%s]*TRUNCATE[%s]") and "TRUNCATE" or
+                           upper:match(";[%s]*INSERT[%s]+INTO") and "INSERT" or
+                           upper:match(";[%s]*CREATE[%s(]") and "CREATE" or
+                           upper:match(";[%s]*GRANT[%s]") and "GRANT" or
+                           upper:match(";[%s]*REVOKE[%s]") and "REVOKE" or
+                           upper:match(";[%s]*EXECUTE[%s]") and "EXECUTE" or
+                           upper:match(";[%s]*EXEC[%s]") and "EXEC"
+            if bad_kw then
+                error("Raw WHERE condition does not allow '" .. bad_kw .. "' statements")
+            end
         end
 
         condition = {
@@ -247,7 +270,33 @@ function Query:_resolveTimeout()
     return nil
 end
 
+-- Get list of available relation names on the entity
+function Query:_getRelationNames()
+    local names = {}
+    for name in pairs(self._entity._relations) do
+        names[#names + 1] = name
+    end
+    table.sort(names)
+    return names
+end
+
 function Query:_eagerLoad(instances)
+    if #self._includes == 0 then return end
+
+    -- Validate all included relations exist before loading
+    for _, rel_name in ipairs(self._includes) do
+        local relation = self._entity._relations[rel_name]
+        if not relation then
+            local available = table.concat(self:_getRelationNames(), ", ")
+            error(string.format(
+                "Relation '%s' not found on entity '%s'. Available relations: %s",
+                rel_name,
+                self._entity._table,
+                available
+            ))
+        end
+    end
+
     if #instances == 0 then return end
 
     for _, rel_name in ipairs(self._includes) do
@@ -627,13 +676,12 @@ function Query:take(n)
     local q = Query.new(self._entity)
     q._where = self._where
     -- Use driver-appropriate random function
-    local random_fn = "RANDOM()"  -- PostgreSQL, SQLite
+    local random_fn = "RANDOM()"  -- PostgreSQL, SQLite (default)
     local driver = self._entity._driver
-    if driver and driver.class and driver.class.__index then
-        local name = tostring(driver.class)
-        if name:find("MySQL") then
-            random_fn = "RAND()"
-        end
+    if driver and driver._driver_type == "mysql" then
+        random_fn = "RAND()"
+    elseif driver and driver._driver_type == "mariadb" then
+        random_fn = "RAND()"
     end
     q._orderBy = { { column = random_fn, dir = "" } }
     q._select = self._select

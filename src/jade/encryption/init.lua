@@ -1,6 +1,6 @@
 local M = {}
 
--- Encryption configuration
+-- Encryption configuration (global — legacy / fallback)
 local enc_config = {
     key = nil,
     algorithm = "aes",  -- "aes" for database-native, "custom" for user-provided functions
@@ -11,11 +11,59 @@ local enc_config = {
     decrypt_fn = nil,   -- function(encrypted_value, key) -> value
 }
 
+-- Per-entity encryption configuration
+local entity_configs = {}
+
 -- Column-level encryption markers
 local encrypted_columns = {}
 
--- Configure encryption
+-- Warn once about global configure when per-entity configs exist
+local _warned_global_over_entity = false
+
+--- Set encryption config for a specific entity
+--- @param entity_name string The entity/table name
+--- @param opts table|nil Options: {key?, algorithm?, database_encrypted?, fields?, encrypt_fn?, decrypt_fn?}
+function M.setEntityConfig(entity_name, opts)
+    if not entity_name or type(entity_name) ~= "string" then
+        error("setEntityConfig: entity_name must be a non-empty string")
+    end
+
+    if entity_configs[entity_name] and opts then
+        -- Merge into existing entity config
+        for k, v in pairs(opts) do
+            entity_configs[entity_name][k] = v
+        end
+    else
+        -- Create fresh entity-specific config
+        entity_configs[entity_name] = setmetatable({}, {__index = enc_config})
+        if opts then
+            for k, v in pairs(opts) do
+                entity_configs[entity_name][k] = v
+            end
+        end
+    end
+end
+
+--- Get encryption config for a specific entity
+--- Returns per-entity config if set, otherwise falls back to global config
+--- @param entity_name string The entity/table name
+--- @return table Config table (merged with globals as fallback)
+function M.getEntityConfig(entity_name)
+    return entity_configs[entity_name] or enc_config
+end
+
+--- Configure global encryption settings (legacy API)
+--- Issues a warning if per-entity configs already exist
+--- @param opts table Options: {key?, algorithm?, database_encrypted?, fields?, encrypt_fn?, decrypt_fn?, encrypt_file?, decrypt_file?}
 function M.configure(opts)
+    if next(entity_configs) and not only_entity then
+        if not _warned_global_over_entity then
+            _warned_global_over_entity = true
+            print("[WARN] jade.Encryption.configure() called globally while per-entity configs exist. " ..
+                  "Global keys will NOT affect entities that have their own .encryption() config.")
+        end
+    end
+
     if opts.key then enc_config.key = opts.key end
     if opts.algorithm then enc_config.algorithm = opts.algorithm end
     if opts.database_encrypted ~= nil then enc_config.database_encrypted = opts.database_encrypted end
@@ -53,7 +101,7 @@ function M.loadEncryptionFile(file_path)
     return fn
 end
 
--- Get config
+-- Get global config (for backward compatibility)
 function M.getConfig()
     return enc_config
 end
@@ -68,14 +116,19 @@ end
 
 -- Check if a column should be encrypted
 function M.isEncrypted(entity_name, column_name)
+    -- Per-entity markers
     if encrypted_columns[entity_name] and encrypted_columns[entity_name][column_name] then
         return true
     end
-    if enc_config.database_encrypted then
+
+    -- Use per-entity config first, fallback to global
+    local config = M.getEntityConfig(entity_name)
+
+    if config.database_encrypted then
         return true
     end
-    if enc_config.fields[entity_name] then
-        for _, field in ipairs(enc_config.fields[entity_name]) do
+    if config.fields[entity_name] then
+        for _, field in ipairs(config.fields[entity_name]) do
             if field == column_name then return true end
         end
     end
@@ -85,6 +138,7 @@ end
 -- Get fields that should be encrypted for an entity
 function M.getEncryptedFields(entity_name, columns)
     local fields = {}
+    local config = M.getEntityConfig(entity_name)
 
     -- From column-level markers
     if encrypted_columns[entity_name] then
@@ -93,16 +147,16 @@ function M.getEncryptedFields(entity_name, columns)
         end
     end
 
-    -- From database-wide encryption
-    if enc_config.database_encrypted then
+    -- From database-wide encryption (per-entity or global)
+    if config.database_encrypted then
         for col_name in pairs(columns) do
             fields[col_name] = true
         end
     end
 
-    -- From field-specific config
-    if enc_config.fields[entity_name] then
-        for _, field in ipairs(enc_config.fields[entity_name]) do
+    -- From field-specific config (per-entity or global)
+    if config.fields[entity_name] then
+        for _, field in ipairs(config.fields[entity_name]) do
             fields[field] = true
         end
     end
@@ -110,14 +164,24 @@ function M.getEncryptedFields(entity_name, columns)
     return fields
 end
 
--- Get the encryption key
+-- Get the encryption key for an entity
 function M.getKey()
     return enc_config.key
 end
 
--- Check if encryption is enabled
+function M.getEntityKey(entity_name)
+    local config = M.getEntityConfig(entity_name)
+    return config.key
+end
+
+-- Check if encryption is enabled (global)
 function M.isEnabled()
     return enc_config.key ~= nil and enc_config.key ~= ""
+end
+
+function M.isEntityEnabled(entity_name)
+    local config = M.getEntityConfig(entity_name)
+    return config.key ~= nil and config.key ~= ""
 end
 
 -- Check if using custom encryption (Lua-level)
@@ -125,27 +189,59 @@ function M.isCustom()
     return enc_config.algorithm == "custom" and enc_config.encrypt_fn and enc_config.decrypt_fn
 end
 
+function M.isEntityCustom(entity_name)
+    local config = M.getEntityConfig(entity_name)
+    return config.algorithm == "custom" and config.encrypt_fn and config.decrypt_fn
+end
+
 -- Check if using database-native encryption
 function M.isNative()
     return enc_config.algorithm == "aes" and M.isEnabled()
 end
 
+function M.isEntityNative(entity_name)
+    local config = M.getEntityConfig(entity_name)
+    return config.algorithm == "aes" and M.isEntityEnabled(entity_name)
+end
+
 --- Encrypt a value using custom function
 --- @param value any The value to encrypt
+--- @param entity_name string The entity/table name (optional for global)
 --- @return any The encrypted value (or original if no custom function)
-function M.encryptValue(value)
+function M.encryptValue(value, entity_name)
     if value == nil then return nil end
-    if not M.isCustom() then return value end
-    return enc_config.encrypt_fn(value, enc_config.key)
+
+    local config
+    if entity_name then
+        config = M.getEntityConfig(entity_name)
+        if config.algorithm ~= "custom" or not config.encrypt_fn then
+            return value
+        end
+        return config.encrypt_fn(value, config.key)
+    else
+        if not M.isCustom() then return value end
+        return enc_config.encrypt_fn(value, enc_config.key)
+    end
 end
 
 --- Decrypt a value using custom function
 --- @param value any The value to decrypt
+--- @param entity_name string The entity/table name (optional for global)
 --- @return any The decrypted value (or original if no custom function)
-function M.decryptValue(value)
+function M.decryptValue(value, entity_name)
     if value == nil then return nil end
-    if not M.isCustom() then return value end
-    return enc_config.decrypt_fn(value, enc_config.key)
+
+    local config
+    if entity_name then
+        config = M.getEntityConfig(entity_name)
+        if config.algorithm ~= "custom" or not config.decrypt_fn then
+            return value
+        end
+        return config.decrypt_fn(value, config.key)
+    else
+        if not M.isCustom() then return value end
+        return enc_config.decrypt_fn(value, enc_config.key)
+    end
 end
 
 --- Wrap a column reference with encryption function for INSERT/UPDATE
@@ -153,9 +249,12 @@ end
 --- Uses session variables to avoid exposing the key in SQL strings
 --- @param column_ref string The quoted column reference (e.g., '"email"')
 --- @param driver table The database driver
+--- @param entity_name string The entity/table name (optional for global)
 --- @return string SQL fragment with encryption
-function M.wrapEncrypt(column_ref, driver)
-    if not M.isEnabled() or M.isCustom() then
+function M.wrapEncrypt(column_ref, driver, entity_name)
+    local config = entity_name and M.getEntityConfig(entity_name) or enc_config
+
+    if not (config.key and config.key ~= "") or config.algorithm ~= "aes" then
         return column_ref
     end
 
@@ -177,10 +276,13 @@ end
 --- Uses session variables to avoid exposing the key in SQL strings
 --- @param column_ref string The quoted column reference (e.g., '"email"')
 --- @param driver table The database driver
+--- @param entity_name string The entity/table name (optional for global)
 --- @param as_name string Optional alias for the decrypted column
 --- @return string SQL fragment with decryption
-function M.wrapDecrypt(column_ref, driver, as_name)
-    if not M.isEnabled() or M.isCustom() then
+function M.wrapDecrypt(column_ref, driver, entity_name, as_name)
+    local config = entity_name and M.getEntityConfig(entity_name) or enc_config
+
+    if not (config.key and config.key ~= "") or config.algorithm ~= "aes" then
         return column_ref
     end
 
@@ -205,7 +307,8 @@ end
 --- @param driver table The database driver
 --- @return string, table The resolved SQL fragment and any bindings
 function M.resolveSelectItem(item, entity_name, columns, driver)
-    if not M.isEnabled() or M.isCustom() then
+    local config = M.getEntityConfig(entity_name)
+    if not (config.key and config.key ~= "") or config.algorithm ~= "aes" then
         return nil, nil  -- No native encryption, use default handling
     end
 
@@ -213,14 +316,14 @@ function M.resolveSelectItem(item, entity_name, columns, driver)
         if M.isEncrypted(entity_name, item) then
             local Quoting = require("jade.util.quoting")
             local col_ref = Quoting.quoteIdentifier(item)
-            return M.wrapDecrypt(col_ref, driver, Quoting.quoteIdentifier(item)), {}
+            return M.wrapDecrypt(col_ref, driver, entity_name), {}
         end
     elseif type(item) == "table" and item._column then
         if M.isEncrypted(entity_name, item._column) then
             local Quoting = require("jade.util.quoting")
             local col_ref = Quoting.quoteIdentifier(item._column)
             local alias = item._alias and (" AS " .. Quoting.quoteIdentifier(item._alias)) or ""
-            return M.wrapDecrypt(col_ref, driver, nil) .. alias, {}
+            return M.wrapDecrypt(col_ref, driver, entity_name, nil) .. alias, {}
         end
     end
 
@@ -236,7 +339,9 @@ end
 --- @param driver table The database driver
 --- @return table, table Modified data and encryption markers
 function M.prepareInsert(data, entity_name, columns, driver)
-    if not M.isEnabled() then
+    local config = M.getEntityConfig(entity_name)
+
+    if not (config.key and config.key ~= "") then
         return data, {}
     end
 
@@ -246,9 +351,9 @@ function M.prepareInsert(data, entity_name, columns, driver)
 
     for k, v in pairs(data) do
         if fields[k] then
-            if M.isCustom() then
+            if config.algorithm == "custom" and config.encrypt_fn then
                 -- Custom encryption: encrypt in Lua
-                result[k] = M.encryptValue(v)
+                result[k] = M.encryptValue(v, entity_name)
             else
                 -- Native encryption: mark for SQL-level encryption
                 encrypt_cols[k] = true
@@ -280,7 +385,9 @@ end
 --- @param columns table The entity columns
 --- @return table The decrypted row data
 function M.decryptFields(entity_name, data, columns)
-    if not M.isEnabled() or not M.isCustom() then
+    local config = M.getEntityConfig(entity_name)
+
+    if not (config.key and config.key ~= "") or config.algorithm ~= "custom" then
         return data  -- Native encryption handles decryption at SQL level
     end
 
@@ -289,7 +396,7 @@ function M.decryptFields(entity_name, data, columns)
 
     for k, v in pairs(data) do
         if fields[k] then
-            result[k] = M.decryptValue(v)
+            result[k] = M.decryptValue(v, entity_name)
         else
             result[k] = v
         end
@@ -298,7 +405,7 @@ function M.decryptFields(entity_name, data, columns)
     return result
 end
 
--- Clear config (for testing)
+-- Clear all encryption state (for testing)
 function M.clear()
     enc_config = {
         key = nil,
@@ -307,10 +414,10 @@ function M.clear()
         fields = {},
         encrypt_fn = nil,
         decrypt_fn = nil,
-        encrypt_file = nil,
-        decrypt_file = nil,
     }
+    entity_configs = {}
     encrypted_columns = {}
+    _warned_global_over_entity = false
 end
 
 return M

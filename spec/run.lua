@@ -147,6 +147,7 @@ local test_files = {
     "schema/declarative_spec.lua",
     "query/expression_spec.lua",
     "query/condition_spec.lua",
+    "query/eager_loading_spec.lua",
     "query/paginate_spec.lua",
     "entity/entity_spec.lua",
     "entity/instance_spec.lua",
@@ -168,11 +169,14 @@ local test_files = {
     "security/sanitizer_spec.lua",
     "security/validator_spec.lua",
     "security/escape_spec.lua",
+    "query/raw_spec.lua",
             "introspection/converter_spec.lua",
         "errors/errors_spec.lua",
     "schema/views_spec.lua",
     "entity/events_spec.lua",
     "entity/scopes_spec.lua",
+    "entity/habtm_pivot_spec.lua",
+    "query/take_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")

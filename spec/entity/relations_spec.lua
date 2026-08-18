@@ -83,4 +83,48 @@ describe("Relations", function()
             assert.are.equal("author_id", rel.foreign_key)
         end)
     end)
+
+    describe("self-referential relations", function()
+        local Category
+
+        before_each(function()
+            Category = Entity.new("categories", {
+                id = Integer():primaryKey(),
+                name = String(100),
+            })
+        end)
+
+        it("raises error when hasMany self-referential without explicit foreign_key", function()
+            assert.has_error(function()
+                Relations.hasMany(Category, Category)
+            end)
+        end)
+
+        it("raises error when hasOne self-referential without explicit foreign_key", function()
+            assert.has_error(function()
+                Relations.hasOne(Category, Category)
+            end)
+        end)
+
+        it("raises error when belongsTo self-referential without explicit foreign_key", function()
+            assert.has_error(function()
+                Category:belongsTo(Category)
+            end)
+        end)
+
+        it("allows hasMany self-referential with explicit foreign_key", function()
+            local rel = Relations.hasMany(Category, Category, { foreign_key = "parent_id" })
+            assert.are.equal("parent_id", rel.foreign_key)
+        end)
+
+        it("allows hasOne self-referential with explicit foreign_key", function()
+            local rel = Relations.hasOne(Category, Category, { foreign_key = "parent_id" })
+            assert.are.equal("parent_id", rel.foreign_key)
+        end)
+
+        it("allows belongsTo self-referential with explicit foreign_key", function()
+            local rel = Relations.belongsTo(Category, { foreign_key = "parent_id" })
+            assert.are.equal("parent_id", rel.foreign_key)
+        end)
+    end)
 end)
