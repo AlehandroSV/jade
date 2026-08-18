@@ -1,15 +1,24 @@
 -- OpenResty driver using ngx.socket.tcp for non-blocking PostgreSQL queries
 -- Requires OpenResty runtime
 
-local PostgreSQL = require("jade.driver.postgresql")
+local ok_pg, PostgreSQL = pcall(require, "jade.driver.postgresql")
+if not ok_pg then
+    PostgreSQL = {}
+end
 
 local OpenResty = setmetatable({}, { __index = PostgreSQL })
 OpenResty.__index = OpenResty
 
 OpenResty._driver_type = "openresty"
 
+-- Check if ngx is available
+local ok_ngx, ngx = pcall(require, "ngx")
+if not ok_ngx then
+    ngx = nil
+end
+
 function OpenResty.new()
-    local self = setmetatable(PostgreSQL.new(), OpenResty)
+    local self = setmetatable(PostgreSQL.new and PostgreSQL.new() or {}, OpenResty)
     self._pool_size = 10
     self._pool_timeout = 10000  -- ms
     self._sock = nil
@@ -35,6 +44,10 @@ function OpenResty:connect(opts)
 end
 
 function OpenResty:_get_socket()
+    if not ngx then
+        error("OpenResty driver requires ngx runtime")
+    end
+
     local sock = ngx.socket.tcp()
     sock:settimeout(self._pool_timeout)
 
@@ -55,6 +68,7 @@ end
 
 function OpenResty:execute(sql, bindings)
     local sock = self:_get_socket()
+    local results = {}
     local ok, err = pcall(function()
         -- Use PostgreSQL simple query protocol
         local query = sql
@@ -78,10 +92,66 @@ function OpenResty:execute(sql, bindings)
 
         sock:send(packet)
 
-        -- Read response (simplified — real implementation would parse PostgreSQL wire protocol)
-        local data, err = sock:receive("*l")
-        if not data then
-            error("Query failed: " .. tostring(err))
+        -- Parse PostgreSQL wire protocol response
+        -- Response format: 1 byte type + 4 bytes length + data
+        while true do
+            local header, header_err = sock:receive(5)
+            if not header then
+                break
+            end
+
+            local msg_type = header:sub(1, 1)
+            local msg_len = header:byte(2) * 256 * 256 * 256 +
+                           header:byte(3) * 256 * 256 +
+                           header:byte(4) * 256 +
+                           header:byte(5) - 4
+
+            if msg_type == "T" then
+                -- Row Description: parse column info
+                -- Skip for now, we'll use simple parsing
+                sock:receive(msg_len)
+            elseif msg_type == "D" then
+                -- Data Row: parse row data
+                local row_data = sock:receive(msg_len)
+                if row_data then
+                    local num_fields = row_data:byte(1) * 256 + row_data:byte(2)
+                    local row = {}
+                    local pos = 3
+                    for i = 1, num_fields do
+                        local field_len = row_data:byte(pos) * 256 * 256 * 256 +
+                                         row_data:byte(pos + 1) * 256 * 256 +
+                                         row_data:byte(pos + 2) * 256 +
+                                         row_data:byte(pos + 3)
+                        pos = pos + 4
+                        if field_len == -1 or field_len == 4294967295 then
+                            -- NULL value
+                            row[i] = nil
+                        else
+                            row[i] = row_data:sub(pos, pos + field_len - 1)
+                            pos = pos + field_len
+                        end
+                    end
+                    results[#results + 1] = row
+                end
+            elseif msg_type == "C" then
+                -- Command Complete
+                sock:receive(msg_len)
+                break
+            elseif msg_type == "E" then
+                -- Error
+                local error_data = sock:receive(msg_len)
+                if error_data then
+                    error("PostgreSQL error: " .. error_data)
+                end
+                break
+            elseif msg_type == "Z" then
+                -- Ready for Query
+                sock:receive(msg_len)
+                break
+            else
+                -- Unknown message type, skip
+                sock:receive(msg_len)
+            end
         end
     end)
 
@@ -99,7 +169,7 @@ function OpenResty:execute(sql, bindings)
         error(err)
     end
 
-    return {}
+    return results
 end
 
 function OpenResty:getConnection()
