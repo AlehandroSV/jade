@@ -58,25 +58,21 @@ describe("Migration API", function()
             tracker.recordMigration(driver, "001_create_users")
             tracker.recordMigration(driver, "002_add_email")
 
-            -- Should not error with number argument
-            -- (actual rollback will fail because migration files don't exist,
-            -- but the API accepts the argument)
-            local ok, err = pcall(function()
-                migration.rollback(driver, 1)
-            end)
-            -- We expect an error because migration file doesn't exist,
-            -- but the function was called successfully with the argument
-            assert.is_true(ok or err ~= nil)
+            -- Rollback should work with number argument
+            local result = migration.rollback(driver, 1)
+            assert.is_truthy(result)
+            assert.is_truthy(type(result) == "table")
         end)
 
         it("rollback accepts options table with steps", function()
             local driver = mock_driver()
             tracker.recordMigration(driver, "001_create_users")
+            tracker.recordMigration(driver, "002_add_email")
 
-            local ok, err = pcall(function()
-                migration.rollback(driver, { steps = 1 })
-            end)
-            assert.is_true(ok or err ~= nil)
+            -- Rollback should work with options table
+            local result = migration.rollback(driver, { steps = 1 })
+            assert.is_truthy(result)
+            assert.is_truthy(type(result) == "table")
         end)
 
         it("rollback returns results table", function()
