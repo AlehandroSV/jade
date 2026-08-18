@@ -41,8 +41,24 @@ describe("Eager Loading Deduplication", function()
             { _data = { id = 3, title = "Post 3", user_id = 1 } },
         }
 
-        -- Verify deduplication works by checking the query
-        -- With deduplication, the IN clause should have only one ID
-        assert.is_truthy(true) -- Placeholder for actual verification
+        -- Call eager loading directly
+        local Query = require("jade.query")
+        local q = Query.new(Post)
+        q._includes = { "user" }
+        q:_eagerLoad(instances)
+
+        -- Verify deduplication: the IN clause should have only one ID (1), not three (1,1,1)
+        local user_query = nil
+        for _, q in ipairs(queries) do
+            if q.sql:match("dedup_users") then
+                user_query = q
+                break
+            end
+        end
+
+        assert.is_truthy(user_query, "Expected a query to dedup_users table")
+        -- The bindings should contain only one ID (deduplicated)
+        assert.are.equal(1, #user_query.bindings, "Expected 1 deduplicated ID, got " .. #user_query.bindings)
+        assert.are.equal(1, user_query.bindings[1])
     end)
 end)
