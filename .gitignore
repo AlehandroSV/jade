@@ -3,6 +3,7 @@
 !src/**/*.lua
 !spec/**/*.lua
 !fixtures/**/*.lua
+!migrations/**/*.lua
 
 # LuaRocks
 *.rock
