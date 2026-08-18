@@ -55,4 +55,37 @@ describe("Context Module", function()
         assert.are.equal("new", context.get("overwrite_key"))
         context.clear()
     end)
+
+    it("isolates context between coroutines", function()
+        -- Test that coroutines have isolated contexts
+        local co1_results = {}
+        local co2_results = {}
+
+        local co1 = coroutine.create(function()
+            context.set("co_key", "co1_value")
+            co1_results.value = context.get("co_key")
+            coroutine.yield()
+            co1_results.after_yield = context.get("co_key")
+        end)
+
+        local co2 = coroutine.create(function()
+            context.set("co_key", "co2_value")
+            co2_results.value = context.get("co_key")
+        end)
+
+        -- Run co1 first
+        coroutine.resume(co1)
+        -- Run co2
+        coroutine.resume(co2)
+        -- Resume co1
+        coroutine.resume(co1)
+
+        -- Each coroutine should have its own value
+        assert.are.equal("co1_value", co1_results.value)
+        assert.are.equal("co1_value", co1_results.after_yield)
+        assert.are.equal("co2_value", co2_results.value)
+
+        -- Clean up
+        context.clear()
+    end)
 end)
