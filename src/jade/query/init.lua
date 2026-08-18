@@ -125,8 +125,16 @@ function Query:where(condition)
                 end
                 return self._raw, bindings_out
             end,
+            band = function(self, other)
+                return setmetatable({ left = self, right = other, type = "and" }, { __index = Condition })
+            end,
+            bor = function(self, other)
+                return setmetatable({ left = self, right = other, type = "or" }, { __index = Condition })
+            end,
         }
     end
+    -- Flag set even for non-filtering conditions (e.g. raw("1=1")).
+    -- The user's intent to filter is explicit, which is what matters.
     self._where_explicit = true
     self._where[#self._where + 1] = condition
     return self
