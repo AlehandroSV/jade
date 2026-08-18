@@ -4,13 +4,12 @@
 
 describe("Migration rollback atomicity", function()
     local tracker = require("jade.migration.tracker")
+    local M = require("jade.migration")
 
-    local function mock_driver(opts)
-        opts = opts or {}
+    local function mock_driver()
         local migrations_table = {}
         local driver = {
             _migrations = migrations_table,
-            _fail_rollback = opts.fail_rollback or nil,
         }
 
         function driver:execute(sql, bindings)
@@ -50,35 +49,61 @@ describe("Migration rollback atomicity", function()
         return driver
     end
 
-    -- Mock the file and runner modules for rollback testing
-    -- We test the rollback logic directly by simulating the pattern
+    -- Save original modules for restoration
+    local original_file = M.file
+    local original_runner = M.runner
+
+    local function setup_mocks(opts)
+        opts = opts or {}
+        local fail_migration = opts.fail_migration
+
+        -- Mock file module
+        M.file = {
+            listFiles = function()
+                return {
+                    { name = "001_create_users", path = "migrations/001_create_users" },
+                    { name = "002_add_email", path = "migrations/002_add_email" },
+                    { name = "003_add_bio", path = "migrations/003_add_bio" },
+                }
+            end,
+            load = function(path)
+                return { name = path:match("([^/]+)$") }
+            end,
+        }
+
+        -- Mock runner module
+        M.runner = {
+            run = function(driver, migration, direction)
+                if fail_migration and migration.name == fail_migration then
+                    error("Migration failed: " .. migration.name)
+                end
+                return true
+            end,
+        }
+    end
+
+    after_each(function()
+        M.file = original_file
+        M.runner = original_runner
+    end)
+
     it("removes tracker for successful rollbacks even when later rollback fails", function()
         local driver = mock_driver()
+        setup_mocks({ fail_migration = "001_create_users" })
+
         -- Seed 3 migrations
         tracker.recordMigration(driver, "001_create_users")
         tracker.recordMigration(driver, "002_add_email")
         tracker.recordMigration(driver, "003_add_bio")
 
-        -- Simulate rollback of all 3, where 001 fails
-        -- Rollback order (newest first): 003, 002, 001
-        local to_rollback = { "003_add_bio", "002_add_email", "001_create_users" }
-        local rollback_fail = "001_create_users"
-        local rolled_back = {}
+        -- Rollback all 3 - 001 will fail
+        local ok, err = pcall(function()
+            M.rollback(driver, 3)
+        end)
 
-        for _, name in ipairs(to_rollback) do
-            if name == rollback_fail then
-                -- This rollback fails
-                break
-            end
-            -- Rollback succeeded, track it
-            rolled_back[#rolled_back + 1] = name
-        end
-
-        -- BUG behavior: remove tracker immediately per rollback
-        -- Fix behavior: remove all successful trackers after all rollbacks
-        for _, name in ipairs(rolled_back) do
-            tracker.removeMigration(driver, name)
-        end
+        -- Should have thrown an error for the failed migration
+        assert.is_falsy(ok)
+        assert.is_truthy(err:find("Rollback failed: 001_create_users"))
 
         local applied = tracker.getAppliedMigrations(driver)
         -- 003 and 002 should be removed (their rollbacks succeeded)
@@ -90,19 +115,14 @@ describe("Migration rollback atomicity", function()
 
     it("removes all trackers when all rollbacks succeed", function()
         local driver = mock_driver()
+        setup_mocks()
+
+        -- Seed 2 migrations
         tracker.recordMigration(driver, "001_create_users")
         tracker.recordMigration(driver, "002_add_email")
 
-        local to_rollback = { "002_add_email", "001_create_users" }
-        local rolled_back = {}
-
-        for _, name in ipairs(to_rollback) do
-            rolled_back[#rolled_back + 1] = name
-        end
-
-        for _, name in ipairs(rolled_back) do
-            tracker.removeMigration(driver, name)
-        end
+        -- Rollback both - should succeed
+        M.rollback(driver, 2)
 
         local applied = tracker.getAppliedMigrations(driver)
         assert.is_falsy(applied["001_create_users"])
@@ -111,27 +131,25 @@ describe("Migration rollback atomicity", function()
 
     it("does not remove any trackers when first rollback fails", function()
         local driver = mock_driver()
+        setup_mocks({ fail_migration = "003_add_bio" })
+
+        -- Seed 3 migrations
         tracker.recordMigration(driver, "001_create_users")
         tracker.recordMigration(driver, "002_add_email")
+        tracker.recordMigration(driver, "003_add_bio")
 
-        local to_rollback = { "002_add_email", "001_create_users" }
-        local rollback_fail = "002_add_email"
-        local rolled_back = {}
+        -- Rollback 2 - 003 (newest) will fail first
+        local ok, err = pcall(function()
+            M.rollback(driver, 2)
+        end)
 
-        for _, name in ipairs(to_rollback) do
-            if name == rollback_fail then
-                break
-            end
-            rolled_back[#rolled_back + 1] = name
-        end
-
-        for _, name in ipairs(rolled_back) do
-            tracker.removeMigration(driver, name)
-        end
+        assert.is_falsy(ok)
+        assert.is_truthy(err:find("Rollback failed: 003_add_bio"))
 
         local applied = tracker.getAppliedMigrations(driver)
-        -- Both should still be tracked since first rollback failed
+        -- All should still be tracked since first rollback failed
         assert.is_true(applied["001_create_users"])
         assert.is_true(applied["002_add_email"])
+        assert.is_true(applied["003_add_bio"])
     end)
 end)
