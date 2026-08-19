@@ -268,12 +268,11 @@ describe("Connection Pool", function()
             local conn = pool:acquire()
             pool.connections[1].last_used = os.time() - 20
 
-            assert.has_error(function()
-                pool:acquire()
-            end)
-
+            -- Alive abandoned connection is reclaimed, not discarded
+            local new_conn = pool:acquire()
+            assert.is_truthy(new_conn)
             assert.are.equal(1, #pool.connections)
-            assert.is_true(pool.connections[1].in_use)
+            assert.are.equal(0, #driver.connections_closed)
         end)
 
         it("logs warning when reclaiming abandoned connection", function()
@@ -320,6 +319,36 @@ describe("Connection Pool", function()
 
             local new_conn = pool:acquire()
             assert.is_truthy(new_conn)
+        end)
+
+        it("reclaims alive abandoned connection instead of discarding it", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 10 })
+
+            local conn = pool:acquire()
+            pool.connections[1].last_used = os.time() - 20
+            -- Connection is alive (NOT marked dead)
+
+            local new_conn = pool:acquire()
+            assert.is_truthy(new_conn)
+            -- Should reuse the same connection, not create a new one
+            assert.are.equal(1, pool.created)
+            assert.are.equal(1, #pool.connections)
+        end)
+
+        it("closes dead abandoned connection and creates new one", function()
+            local driver = mock_driver()
+            local pool = Pool.new(driver, { min_size = 1, max_size = 1, abandoned_timeout = 10 })
+
+            local conn = pool:acquire()
+            local old_conn = pool.connections[1].connection
+            pool.connections[1].last_used = os.time() - 20
+            driver:mark_dead(pool.connections[1].connection)
+
+            local new_conn = pool:acquire()
+            assert.is_truthy(new_conn)
+            assert.is_true(new_conn ~= old_conn)
+            assert.are.equal(1, #driver.connections_closed)
         end)
     end)
 

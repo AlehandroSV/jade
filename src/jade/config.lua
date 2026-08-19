@@ -2,9 +2,30 @@ local M = {}
 
 local config = nil
 
--- Environment detection
+-- Default environment variable fallbacks (order matters)
+local DEFAULT_ENV_FALLBACKS = {
+    "JADE_ENV",
+    "RAILS_ENV",     -- Ruby on Rails
+    "NODE_ENV",      -- Node.js / Express
+    "GO_ENV",        -- Go
+    "APP_ENV",       -- Elixir / Phoenix
+    "FLASK_ENV",     -- Python / Flask
+    "RACK_ENV",      -- Ruby (genérico)
+}
+
+-- Environment detection with extensible fallbacks
 local function detectEnvironment()
-    return os.getenv("JADE_ENV") or os.getenv("RAILS_ENV") or os.getenv("NODE_ENV") or "development"
+    local fallbacks = DEFAULT_ENV_FALLBACKS
+    if config and config.env_vars then
+        fallbacks = config.env_vars
+    end
+    for _, var in ipairs(fallbacks) do
+        local value = os.getenv(var)
+        if value and value ~= "" then
+            return value
+        end
+    end
+    return "development"
 end
 
 -- Resolve environment variable references in config values
