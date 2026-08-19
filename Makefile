@@ -1,4 +1,4 @@
-.PHONY: test lint integration clean release
+.PHONY: test lint integration benchmark clean release
 
 test:
 	lua spec/run.lua
@@ -8,6 +8,9 @@ lint:
 
 integration:
 	lua spec/integration/run.lua
+
+benchmark:
+	lua bench/run.lua
 
 clean:
 	rm -rf coverage/
