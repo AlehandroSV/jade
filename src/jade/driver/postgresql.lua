@@ -396,8 +396,8 @@ function PostgreSQL:generateSelect(query)
         sql[#sql + 1] = "LIMIT " .. tostring(query._limit)
     end
 
-    -- OFFSET clause
-    if query._offset then
+    -- OFFSET clause (only valid with LIMIT)
+    if query._offset and query._limit then
         sql[#sql + 1] = "OFFSET " .. tostring(query._offset)
     end
 

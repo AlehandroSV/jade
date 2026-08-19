@@ -72,6 +72,31 @@ Jade.config = require("jade.config")
 Jade.log = require("jade.util.log")
 Jade.inflection = require("jade.util.inflection")
 
+-- Plugin System
+Jade.plugin = require("jade.plugin")
+Jade.pluginLoader = require("jade.plugin.loader")
+
+--- Convenience: jade.use(plugin, options) delegates to jade.plugin.use()
+--- @param plugin table The plugin module/table
+--- @param options table|nil Options passed to plugin.setup()
+--- @return boolean ok
+--- @return string|nil error
+function Jade.use(plugin, options)
+    return Jade.plugin.use(plugin, options)
+end
+
+--- Convenience: jade.unloadPlugin(name) delegates to jade.plugin.unloadPlugin()
+--- @param name string
+--- @return boolean ok
+--- @return string|nil error
+function Jade.unloadPlugin(name)
+    return Jade.plugin.unloadPlugin(name)
+end
+
+---------------------------------------------------------------------------
+-- State
+---------------------------------------------------------------------------
+
 -- Current driver instance
 local current_driver = nil
 
@@ -95,6 +120,17 @@ function Jade.configure(opts)
 
     local DriverClass = Jade.drivers.get(driver_name)
     current_driver = DriverClass.new()
+
+    -- Load plugins configured in jade.config.lua (plugins field)
+    if opts.plugins then
+        local results_ = Jade.pluginLoader.loadAll(Jade, opts.plugins)
+        for name_, res_ in pairs(results_) do
+            if not res_.ok then
+                error("failed to load plugin '" .. name_ .. "': " .. tostring(res_.error))
+            end
+        end
+    end
+
     current_driver:connect(db)
 
     return current_driver
