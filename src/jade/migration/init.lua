@@ -72,8 +72,14 @@ function M.migrate(driver)
     return results
 end
 
-function M.rollback(driver, steps)
-    steps = steps or 1
+function M.rollback(driver, opts)
+    -- Accept number (backward compat) or options table
+    local steps = 1
+    if type(opts) == "number" then
+        steps = opts
+    elseif type(opts) == "table" then
+        steps = opts.steps or 1
+    end
 
     -- Get last N applied migrations
     local last_applied = tracker.getLastApplied(driver, steps)
@@ -151,24 +157,23 @@ function M.status(driver)
     local applied = tracker.getAppliedMigrations(driver)
     local files = file.listFiles()
 
+    local executed = {}
+    for name in pairs(applied) do
+        executed[#executed + 1] = name
+    end
+    table.sort(executed)
+
     local pending = {}
     for _, f in ipairs(files) do
         if not applied[f.name] then
-            pending[#pending + 1] = f
+            pending[#pending + 1] = f.name
         end
     end
 
-    local applied_count = 0
-    for _ in pairs(applied) do applied_count = applied_count + 1 end
-    print("Applied: " .. tostring(applied_count))
-    print("Pending: " .. tostring(#pending))
-
-    if #pending > 0 then
-        print("\nPending migrations:")
-        for _, f in ipairs(pending) do
-            print("  - " .. f.name)
-        end
-    end
+    return {
+        executed = executed,
+        pending = pending,
+    }
 end
 
 return M
