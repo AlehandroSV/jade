@@ -52,8 +52,12 @@ end
 
 function M.clear()
     if is_openresty() then
-        ngx.ctx["jade_driver"] = nil
-        ngx.ctx["jade_config"] = nil
+        -- Clear everything stored under ngx.ctx in this module
+        for k in pairs(ngx.ctx) do
+            if type(k) == "string" and k:match("^jade_") then
+                ngx.ctx[k] = nil
+            end
+        end
     else
         local co_key = get_coroutine_key()
         _coroutine_ctx[co_key] = nil

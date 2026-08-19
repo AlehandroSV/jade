@@ -1,5 +1,13 @@
 -- OpenResty driver using ngx.socket.tcp for non-blocking PostgreSQL queries
 -- Requires OpenResty runtime
+--
+-- ⚠️ EXPERIMENTAL: This driver implements a simplified PostgreSQL wire protocol parser
+-- that only handles command-complete responses. SELECT queries will return empty results.
+-- For production use with OpenResty, consider using pgmoon with ngx.socket instead:
+--   https://github.com/leafo/pgmoon
+--
+-- See: https://www.postgresql.org/docs/current/protocol.html
+--      Simple Query Protocol (Q message + C/Z response parsing)
 
 local ok_pg, PostgreSQL = pcall(require, "jade.driver.postgresql")
 if not ok_pg then
@@ -27,7 +35,7 @@ end
 
 function OpenResty:connect(opts)
     if not ngx then
-        error("OpenResty driver requires ngx runtime")
+        return nil, "OpenResty driver requires ngx runtime"
     end
 
     self._host = opts.host or "127.0.0.1"
@@ -45,7 +53,7 @@ end
 
 function OpenResty:_get_socket()
     if not ngx then
-        error("OpenResty driver requires ngx runtime")
+        return nil, "OpenResty driver requires ngx runtime"
     end
 
     local sock = ngx.socket.tcp()
