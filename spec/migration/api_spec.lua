@@ -54,6 +54,12 @@ describe("Migration API", function()
         end)
 
         it("rollback accepts steps as number (backward compat)", function()
+            -- Mock file/runner so rollback doesn't try to load real migration files
+            local saved_file = migration.file
+            local saved_runner = migration.runner
+            migration.file = { load = function(path) return { name = path:match("([^/]+)$") } end }
+            migration.runner = { run = function(driver, migration, direction) return true end }
+
             local driver = mock_driver()
             tracker.recordMigration(driver, "001_create_users")
             tracker.recordMigration(driver, "002_add_email")
@@ -62,9 +68,18 @@ describe("Migration API", function()
             local result = migration.rollback(driver, 1)
             assert.is_truthy(result)
             assert.is_truthy(type(result) == "table")
+
+            migration.file = saved_file
+            migration.runner = saved_runner
         end)
 
         it("rollback accepts options table with steps", function()
+            -- Mock file/runner so rollback doesn't try to load real migration files
+            local saved_file = migration.file
+            local saved_runner = migration.runner
+            migration.file = { load = function(path) return { name = path:match("([^/]+)$") } end }
+            migration.runner = { run = function(driver, migration, direction) return true end }
+
             local driver = mock_driver()
             tracker.recordMigration(driver, "001_create_users")
             tracker.recordMigration(driver, "002_add_email")
@@ -73,6 +88,9 @@ describe("Migration API", function()
             local result = migration.rollback(driver, { steps = 1 })
             assert.is_truthy(result)
             assert.is_truthy(type(result) == "table")
+
+            migration.file = saved_file
+            migration.runner = saved_runner
         end)
 
         it("rollback returns results table", function()

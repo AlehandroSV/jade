@@ -1,13 +1,12 @@
 local tracker = require("jade.migration.tracker")
 local runner = require("jade.migration.runner")
-local file = require("jade.migration.file")
 local diff = require("jade.migration.diff")
 local generator = require("jade.migration.generator")
 
 local M = {
     tracker = tracker,
     runner = runner,
-    file = file,
+    file = require("jade.migration.file"),
     diff = diff,
     generator = generator,
 }
@@ -24,7 +23,7 @@ function M.migrate(driver)
     local applied = tracker.getAppliedMigrations(driver)
 
     -- Get all migration files
-    local files = file.listFiles()
+    local files = M.file.listFiles()
 
     -- Filter to pending migrations
     local pending = {}
@@ -43,9 +42,9 @@ function M.migrate(driver)
     local results = {}
     for _, f in ipairs(pending) do
         print("Applying: " .. f.name)
-        local migration = file.load(f.path)
+        local migration = M.file.load(f.path)
         local ok, err = pcall(function()
-            runner.run(driver, migration, "up")
+            M.runner.run(driver, migration, "up")
         end)
 
         if ok then
@@ -85,8 +84,8 @@ function M.rollback(driver, opts)
         print("Rolling back: " .. name)
         local path = "migrations/" .. name
         local ok, err = pcall(function()
-            local migration = file.load(path)
-            runner.run(driver, migration, "down")
+            local migration = M.file.load(path)
+            M.runner.run(driver, migration, "down")
         end)
 
         if ok then
@@ -109,7 +108,7 @@ function M.preview(driver)
     local applied = tracker.getAppliedMigrations(driver)
 
     -- Get all migration files
-    local files = file.listFiles()
+    local files = M.file.listFiles()
 
     -- Filter to pending migrations
     local pending = {}
@@ -133,7 +132,7 @@ end
 function M.status(driver)
     tracker.createTrackerTable(driver)
     local applied = tracker.getAppliedMigrations(driver)
-    local files = file.listFiles()
+    local files = M.file.listFiles()
 
     local executed = {}
     for name in pairs(applied) do
