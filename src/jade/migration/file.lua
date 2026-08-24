@@ -16,13 +16,10 @@ function M.listFiles()
     local dir = getMigrationsDir()
     local files = {}
 
-    local ok, iter, dir_obj = pcall(function()
-        local lfs = require("lfs")
-        return lfs, lfs.dir(dir)
-    end)
-
+    local ok, lfs_mod = pcall(require, "lfs")
     if ok then
-        for filename in iter, dir_obj do
+        local iter, start_state = lfs_mod.dir(dir)
+        for filename in iter, start_state do
             if filename:match("%.lua$") then
                 files[#files + 1] = {
                     name = filename,
