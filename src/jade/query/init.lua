@@ -294,12 +294,13 @@ function Query:_resolveTimeout()
     if self._timeout then
         return self._timeout
     end
-    local ok, config = pcall(require, "jade.config")
-    if ok then
-        local cfg = config.get()
-        if cfg and cfg.query_timeout then
-            return cfg.query_timeout
-        end
+    local ok, cfg
+    ok, cfg = pcall(function()
+        local config = require("jade.config")
+        return config and config.get()
+    end)
+    if ok and cfg and cfg.query_timeout then
+        return cfg.query_timeout
     end
     return nil
 end
