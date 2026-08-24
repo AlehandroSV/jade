@@ -123,7 +123,6 @@ function Jade.configure(opts)
 
     local DriverClass = Jade.drivers.get(driver_name)
     local driver = DriverClass.new()
-    local driver = DriverClass.new()
 
     -- Load plugins configured in jade.config.lua (plugins field)
     if opts.plugins then
@@ -141,7 +140,6 @@ function Jade.configure(opts)
     context.set("config", db)
 
     return driver
-    return driver
 end
 
 -- Configure from environment-specific config files
@@ -153,19 +151,12 @@ end
 function Jade.driver()
     local driver = context.get("driver")
     if not driver then
-    local driver = context.get("driver")
-    if not driver then
         error(Jade.i18n.t("not_configured"))
     end
-    return driver
     return driver
 end
 
 function Jade.disconnect()
-    local driver = context.get("driver")
-    if driver then
-        driver:disconnect()
-        context.set("driver", nil)
     local driver = context.get("driver")
     if driver then
         driver:disconnect()
@@ -227,9 +218,6 @@ end
 local original_entity = Jade.Entity
 Jade.Entity = function(table_name, columns)
     local entity = original_entity.new(table_name, columns)
-    local driver = context.get("driver")
-    if driver then
-        entity:configure(driver)
     local driver = context.get("driver")
     if driver then
         entity:configure(driver)

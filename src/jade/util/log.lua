@@ -114,10 +114,6 @@ function M.warn(msg)
     emit({ level = "warn", message = msg })
 end
 
-function M.warn(msg)
-    io.stderr:write("[WARN] " .. msg .. "\n")
-end
-
 function M.error(msg)
     if not should_log("error") then return end
     emit({ level = "error", message = msg })
