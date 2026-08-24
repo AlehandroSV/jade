@@ -132,6 +132,12 @@ M.assert.has_error = function(fn)
         error("Expected error, but no error was raised", 3)
     end
 end
+M.assert.has_no_error = function(fn)
+    local ok, err = pcall(fn)
+    if not ok then
+        error("Expected no error, but got: " .. tostring(err), 3)
+    end
+end
 
 -- Make available globally for test files
 describe = M.describe
@@ -141,6 +147,7 @@ assert = M.assert
 
 -- Load and run test files
 local test_files = {
+    "config_spec.lua",
     "types/column_spec.lua",
     "types/types_spec.lua",
     "types/luals_spec.lua",
@@ -156,14 +163,21 @@ local test_files = {
     "entity/proxy_spec.lua",
     "entity/soft_delete_spec.lua",
     "query/builder_spec.lua",
+    "query/eager_dedup_spec.lua",
+    "query/exists_spec.lua",
     "driver/postgresql_spec.lua",
     "driver/mysql_spec.lua",
     "driver/sqlite_spec.lua",
-    "driver/mariadb_spec.lua",
     "driver/pool_spec.lua",
+    "driver/mariadb_spec.lua",
+    "driver/openresty_spec.lua",
+    "driver/openresty_spec.lua",
     "migration/tracker_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
+    "migration/rollback_spec.lua",
+    "migration/api_spec.lua",
+    "migration/file_spec.lua",
     "transaction/transaction_spec.lua",
     "i18n/i18n_spec.lua",
     "security/sanitizer_spec.lua",
@@ -177,6 +191,9 @@ local test_files = {
     "entity/scopes_spec.lua",
     "entity/habtm_pivot_spec.lua",
     "query/take_spec.lua",
+    "query/state_isolation_spec.lua",
+    "query/safe_bulk_spec.lua",
+    "util/log_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")

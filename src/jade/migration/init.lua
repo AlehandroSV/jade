@@ -1,13 +1,12 @@
 local tracker = require("jade.migration.tracker")
 local runner = require("jade.migration.runner")
-local file = require("jade.migration.file")
 local diff = require("jade.migration.diff")
 local generator = require("jade.migration.generator")
 
 local M = {
     tracker = tracker,
     runner = runner,
-    file = file,
+    file = require("jade.migration.file"),
     diff = diff,
     generator = generator,
 }
@@ -24,7 +23,7 @@ function M.migrate(driver)
     local applied = tracker.getAppliedMigrations(driver)
 
     -- Get all migration files
-    local files = file.listFiles()
+    local files = M.file.listFiles()
 
     -- Filter to pending migrations
     local pending = {}
@@ -41,30 +40,45 @@ function M.migrate(driver)
 
     -- Run pending migrations
     local results = {}
+    local applied_names = {}
     for _, f in ipairs(pending) do
         print("Applying: " .. f.name)
-        local migration = file.load(f.path)
+        local migration = M.file.load(f.path)
         local ok, err = pcall(function()
-            runner.run(driver, migration, "up")
+            M.runner.run(driver, migration, "up")
         end)
 
         if ok then
-            -- Record migration only after successful commit
-            tracker.recordMigration(driver, f.name)
+            applied_names[#applied_names + 1] = f.name
             results[#results + 1] = { name = f.name, success = true }
             print("  Applied: " .. f.name)
         else
             results[#results + 1] = { name = f.name, success = false, error = err }
             print("  Failed: " .. f.name .. "\n  Error: " .. tostring(err))
+            -- Record all successful migrations before stopping
+            for _, name in ipairs(applied_names) do
+                tracker.recordMigration(driver, name)
+            end
             error("Migration failed: " .. f.name)
         end
+    end
+
+    -- Record all successful migrations after all complete
+    for _, name in ipairs(applied_names) do
+        tracker.recordMigration(driver, name)
     end
 
     return results
 end
 
-function M.rollback(driver, steps)
-    steps = steps or 1
+function M.rollback(driver, opts)
+    -- Accept number (backward compat) or options table
+    local steps = 1
+    if type(opts) == "number" then
+        steps = opts
+    elseif type(opts) == "table" then
+        steps = opts.steps or 1
+    end
 
     -- Get last N applied migrations
     local last_applied = tracker.getLastApplied(driver, steps)
@@ -75,24 +89,37 @@ function M.rollback(driver, steps)
     end
 
     local results = {}
+    local rolled_back = {}
+    local first_error = nil
+
     for _, name in ipairs(last_applied) do
         print("Rolling back: " .. name)
         local path = "migrations/" .. name
         local ok, err = pcall(function()
-            local migration = file.load(path)
-            runner.run(driver, migration, "down")
+            local migration = M.file.load(path)
+            M.runner.run(driver, migration, "down")
         end)
 
         if ok then
-            -- Remove migration record only after successful rollback
-            tracker.removeMigration(driver, name)
+            rolled_back[#rolled_back + 1] = name
             results[#results + 1] = { name = name, success = true }
             print("  Rolled back: " .. name)
         else
             results[#results + 1] = { name = name, success = false, error = err }
             print("  Failed: " .. name .. "\n  Error: " .. tostring(err))
-            error("Rollback failed: " .. name)
+            if not first_error then
+                first_error = "Rollback failed: " .. name
+            end
         end
+    end
+
+    -- Remove tracker records for ALL successful rollbacks
+    for _, name in ipairs(rolled_back) do
+        tracker.removeMigration(driver, name)
+    end
+
+    if first_error then
+        error(first_error)
     end
 
     return results
@@ -103,7 +130,7 @@ function M.preview(driver)
     local applied = tracker.getAppliedMigrations(driver)
 
     -- Get all migration files
-    local files = file.listFiles()
+    local files = M.file.listFiles()
 
     -- Filter to pending migrations
     local pending = {}
@@ -127,26 +154,25 @@ end
 function M.status(driver)
     tracker.createTrackerTable(driver)
     local applied = tracker.getAppliedMigrations(driver)
-    local files = file.listFiles()
+    local files = M.file.listFiles()
+
+    local executed = {}
+    for name in pairs(applied) do
+        executed[#executed + 1] = name
+    end
+    table.sort(executed)
 
     local pending = {}
     for _, f in ipairs(files) do
         if not applied[f.name] then
-            pending[#pending + 1] = f
+            pending[#pending + 1] = f.name
         end
     end
 
-    local applied_count = 0
-    for _ in pairs(applied) do applied_count = applied_count + 1 end
-    print("Applied: " .. tostring(applied_count))
-    print("Pending: " .. tostring(#pending))
-
-    if #pending > 0 then
-        print("\nPending migrations:")
-        for _, f in ipairs(pending) do
-            print("  - " .. f.name)
-        end
-    end
+    return {
+        executed = executed,
+        pending = pending,
+    }
 end
 
 return M
