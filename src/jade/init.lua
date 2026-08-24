@@ -72,6 +72,9 @@ Jade.config = require("jade.config")
 Jade.log = require("jade.util.log")
 Jade.inflection = require("jade.util.inflection")
 
+-- Context (coroutine-safe state)
+local context = require("jade.util.context")
+
 -- Plugin System
 Jade.plugin = require("jade.plugin")
 Jade.pluginLoader = require("jade.plugin.loader")
@@ -97,8 +100,8 @@ end
 -- State
 ---------------------------------------------------------------------------
 
--- Current driver instance
-local current_driver = nil
+-- Context (coroutine-safe state)
+local context = require("jade.util.context")
 
 function Jade.configure(opts)
     -- Set locale if provided
@@ -119,7 +122,8 @@ function Jade.configure(opts)
     local driver_name = db.driver or "postgresql"
 
     local DriverClass = Jade.drivers.get(driver_name)
-    current_driver = DriverClass.new()
+    local driver = DriverClass.new()
+    local driver = DriverClass.new()
 
     -- Load plugins configured in jade.config.lua (plugins field)
     if opts.plugins then
@@ -131,9 +135,13 @@ function Jade.configure(opts)
         end
     end
 
-    current_driver:connect(db)
+    driver:connect(db)
 
-    return current_driver
+    context.set("driver", driver)
+    context.set("config", db)
+
+    return driver
+    return driver
 end
 
 -- Configure from environment-specific config files
@@ -143,16 +151,25 @@ function Jade.configureFromEnvironment(basePath)
 end
 
 function Jade.driver()
-    if not current_driver then
+    local driver = context.get("driver")
+    if not driver then
+    local driver = context.get("driver")
+    if not driver then
         error(Jade.i18n.t("not_configured"))
     end
-    return current_driver
+    return driver
+    return driver
 end
 
 function Jade.disconnect()
-    if current_driver then
-        current_driver:disconnect()
-        current_driver = nil
+    local driver = context.get("driver")
+    if driver then
+        driver:disconnect()
+        context.set("driver", nil)
+    local driver = context.get("driver")
+    if driver then
+        driver:disconnect()
+        context.set("driver", nil)
     end
 end
 
@@ -210,8 +227,12 @@ end
 local original_entity = Jade.Entity
 Jade.Entity = function(table_name, columns)
     local entity = original_entity.new(table_name, columns)
-    if current_driver then
-        entity:configure(current_driver)
+    local driver = context.get("driver")
+    if driver then
+        entity:configure(driver)
+    local driver = context.get("driver")
+    if driver then
+        entity:configure(driver)
     end
     return entity
 end
