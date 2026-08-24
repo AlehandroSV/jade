@@ -133,6 +133,7 @@ function Query:where(condition)
             end,
         }
     end
+
     -- Flag set even for non-filtering conditions (e.g. raw("1=1")).
     -- The user's intent to filter is explicit, which is what matters.
     self._where_explicit = true

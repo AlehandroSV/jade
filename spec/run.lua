@@ -167,8 +167,8 @@ local test_files = {
     "driver/postgresql_spec.lua",
     "driver/mysql_spec.lua",
     "driver/sqlite_spec.lua",
-    "driver/mariadb_spec.lua",
     "driver/pool_spec.lua",
+    "driver/mariadb_spec.lua",
     "migration/tracker_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
@@ -186,6 +186,7 @@ local test_files = {
     "entity/scopes_spec.lua",
     "entity/habtm_pivot_spec.lua",
     "query/take_spec.lua",
+    "query/state_isolation_spec.lua",
     "query/safe_bulk_spec.lua",
     "util/log_spec.lua",
 }
