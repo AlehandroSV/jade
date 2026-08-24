@@ -295,12 +295,13 @@ function Query:_resolveTimeout()
     if self._timeout then
         return self._timeout
     end
-    local ok, config = pcall(require, "jade.config")
-    if ok then
-        local cfg = config.get()
-        if cfg and cfg.query_timeout then
-            return cfg.query_timeout
-        end
+    local ok, cfg
+    ok, cfg = pcall(function()
+        local config = require("jade.config")
+        return config and config.get()
+    end)
+    if ok and cfg and cfg.query_timeout then
+        return cfg.query_timeout
     end
     return nil
 end
@@ -313,6 +314,19 @@ function Query:_getRelationNames()
     end
     table.sort(names)
     return names
+end
+
+-- Deduplicate IDs for IN clauses (prevents duplicate values)
+local function deduplicateIds(ids)
+    local seen = {}
+    local result = {}
+    for _, id in ipairs(ids) do
+        if not seen[id] then
+            seen[id] = true
+            result[#result + 1] = id
+        end
+    end
+    return result
 end
 
 function Query:_eagerLoad(instances)
@@ -346,6 +360,7 @@ function Query:_eagerLoad(instances)
                         ids[#ids + 1] = fk
                     end
                 end
+                ids = deduplicateIds(ids)
 
                 if #ids > 0 then
                     local target_entity = relation.target
@@ -370,6 +385,7 @@ function Query:_eagerLoad(instances)
                 for _, inst in ipairs(instances) do
                     ids[#ids + 1] = inst._data.id
                 end
+                ids = deduplicateIds(ids)
 
                 if #ids > 0 then
                     local target_entity = relation.target
@@ -396,6 +412,7 @@ function Query:_eagerLoad(instances)
                 for _, inst in ipairs(instances) do
                     ids[#ids + 1] = inst._data.id
                 end
+                ids = deduplicateIds(ids)
 
                 if #ids > 0 then
                     local target_entity = relation.target
@@ -423,6 +440,7 @@ function Query:_eagerLoad(instances)
                 for _, inst in ipairs(instances) do
                     source_ids[#source_ids + 1] = inst._data[relation.source_key]
                 end
+                source_ids = deduplicateIds(source_ids)
 
                 if #source_ids > 0 then
                     local driver = self._entity._driver
@@ -452,6 +470,7 @@ function Query:_eagerLoad(instances)
                             all_target_ids[#all_target_ids + 1] = target_id
                         end
                     end
+                    all_target_ids = deduplicateIds(all_target_ids)
 
                     -- Load target records
                     if #all_target_ids > 0 then
@@ -490,6 +509,7 @@ function Query:_eagerLoad(instances)
                 for _, inst in ipairs(instances) do
                     source_ids[#source_ids + 1] = inst._data.id
                 end
+                source_ids = deduplicateIds(source_ids)
 
                 if #source_ids > 0 then
                     local through_entity = relation.through
@@ -508,6 +528,7 @@ function Query:_eagerLoad(instances)
                             target_ids[#target_ids + 1] = target_id
                         end
                     end
+                    target_ids = deduplicateIds(target_ids)
 
                     if #target_ids > 0 then
                         -- Load target records
