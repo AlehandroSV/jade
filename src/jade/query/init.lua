@@ -544,13 +544,7 @@ function Query:first()
     local q = Query.new(self._entity)
     _copyArrays(self, q); _copyScalars(self, q)
     q._limit = 1
-    q._offset = self._offset
-    q._timeout = self._timeout
-    q._include_trashed = self._include_trashed
-    q._only_trashed = self._only_trashed
-    local results = q:get()
-    return results[1]
-
+    return q:get()[1]
 end
 
 function Query:find(id)
@@ -558,30 +552,89 @@ function Query:find(id)
     _copyArrays(self, q); _copyScalars(self, q)
     q._where = { Condition.new("id", "=", id, self._table) }
     q._limit = 1
-    q._offset = self._offset
     q._timeout = self._timeout
     q._include_trashed = self._include_trashed
     q._only_trashed = self._only_trashed
-    local results = q:get()
-    return results[1]
-
+    return q:get()[1]
 end
 
 function Query:count()
     local q = Query.new(self._entity)
     _copyArrays(self, q); _copyScalars(self, q)
     q._select = { "COUNT(*) as count" }
-    q._includes = self._includes
-    q._joins = self._joins
-    q._groupBy = self._groupBy
-    q._having = self._having
-    q._distinct = self._distinct
-    q._limit = self._limit
-    q._offset = self._offset
-    q._timeout = self._timeout
-    q._include_trashed = self._include_trashed
-    q._only_trashed = self._only_trashed
+    local sql, bindings = q:toSQL()
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].count or 0
+end
 
+function Query:sum(column)
+    local q = Query.new(self._entity)
+    _copyArrays(self, q); _copyScalars(self, q)
+    q._select = { "SUM(" .. Quoting.quoteIdentifier(column) .. ") as sum" }
+    local sql, bindings = q:toSQL()
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].sum or 0
+end
+
+function Query:average(column)
+    local q = Query.new(self._entity)
+    _copyArrays(self, q); _copyScalars(self, q)
+    q._select = { "AVG(" .. Quoting.quoteIdentifier(column) .. ") as avg" }
+    local sql, bindings = q:toSQL()
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].avg or 0
+end
+
+function Query:min(column)
+    local q = Query.new(self._entity)
+    _copyArrays(self, q); _copyScalars(self, q)
+    q._select = { "MIN(" .. Quoting.quoteIdentifier(column) .. ") as min" }
+    local sql, bindings = q:toSQL()
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].min or 0
+end
+
+function Query:max(column)
+    local q = Query.new(self._entity)
+    _copyArrays(self, q); _copyScalars(self, q)
+    q._select = { "MAX(" .. Quoting.quoteIdentifier(column) .. ") as max" }
+    local sql, bindings = q:toSQL()
+    return q._entity._driver:execute(sql, bindings)[1] and q._entity._driver:execute(sql, bindings)[1].max or 0
+end
+
+function Query:paginate(options)
+    local paginate = require("jade.query.paginate")
+    return paginate.paginate(self, options)
+end
+
+function Query:exists()
+    local q = Query.new(self._entity)
+    q._where = self._where
+    q._select = { "1" }
+    q._limit = 1
+    local sql, bindings = q:toSQL()
+    local result = self._entity._driver:execute(sql, bindings)
+    return #result > 0
+end
+
+function Query:empty()
+    return self:count() == 0
+end
+
+function Query:pluck(column)
+    local q = Query.new(self._entity)
+    _copyArrays(self, q); _copyScalars(self, q)
+    q._select = { Quoting.quoteIdentifier(column) }
+    local sql, bindings = q:toSQL()
+    local result = self._entity._driver:execute(sql, bindings)
+    local values = {}
+    for i, row in ipairs(result) do values[i] = row[column] end
+    return values
+end
+
+function Query:take(n)
+    local q = Query.new(self._entity)
+    _copyArrays(self, q); _copyScalars(self, q)
+    local random_fn = "RANDOM()"
+    local driver = self._entity._driver
+    if driver and driver._driver_type == "mysql" then random_fn = "RAND()"
+    elseif driver and driver._driver_type == "mariadb" then random_fn = "RAND()" end
     q._orderBy = { { column = random_fn, dir = "" } }
     q._limit = n
     return q:get()
@@ -647,18 +700,24 @@ function Query:_compileWhere()
 end
 
 function Query:toSQL()
-    -- Apply soft delete filter if entity has soft delete enabled
+    -- Apply soft delete filter WITHOUT mutating self._where permanently
     local SoftDelete = require("jade.entity.soft_delete")
-    if SoftDelete.isSoftDeleted(self._entity) and not self._include_trashed then
-        local col = SoftDelete.getSoftDeleteColumn(self._entity)
-        if self._only_trashed then
-            -- Only return soft-deleted records
-            self._where[#self._where + 1] = Condition.new(col, "IS NOT", nil, self._table)
-        else
-            -- Exclude soft-deleted records (default behavior)
-            self._where[#self._where + 1] = Condition.new(col, "IS", nil, self._table)
-        end
+    if not (SoftDelete.isSoftDeleted(self._entity) and not self._include_trashed) then
+        local driver = self._entity._driver
+        local sql, bindings = driver:generateSelect(self)
+        Security.validateQuery(sql, bindings)
+        return sql, bindings
+    end
 
+    local orig_where = self._where
+    self._where = {}
+    for i = 1, #orig_where do self._where[i] = orig_where[i] end
+
+    local col = SoftDelete.getSoftDeleteColumn(self._entity)
+    if self._only_trashed then
+        self._where[#self._where + 1] = Condition.new(col, "IS NOT", nil, self._table)
+    else
+        self._where[#self._where + 1] = Condition.new(col, "IS", nil, self._table)
     end
 
     local driver = self._entity._driver
