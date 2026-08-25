@@ -20,7 +20,9 @@ return function(Expression)
 
         -- Direct key (no dots) — simple JSON object lookup
         if not p:find(".") then
-            return Cond.new(c, "@>", '{"' .. p .. '": "' .. tostring(value) .. '"}', self._table)
+            local safeKey = p:gsub('"', '\\"'):gsub('\\', '\\\\')
+            local safeVal = tostring(value):gsub('"', '\\"'):gsub('\\', '\\\\')
+            return Cond.new(c, "@>", '{"' .. safeKey .. '": "' .. safeVal .. '"}', self._table)
         end
 
         -- Multi-level path — delegate to driver-specific SQL generator
@@ -107,7 +109,8 @@ return function(Expression)
 
     --- jsonPath(path, [asText])
     --- Extracts a value from JSON column for use in SELECT, ORDER BY, etc.
-    -- Returns an Expression-like object usable in select/order/group calls.
+    -- Returns a lightweight marker table. Drivers recognise it via the `_raw_json` field
+    -- and delegate SQL generation to the Json module. Does NOT inherit Expression methods.
     -- Usage:
     --   User:select("name", User.metadata:jsonPath("email"))
     --   User:orderBy(User.metadata:jsonPath("score"), "DESC")
@@ -117,19 +120,14 @@ return function(Expression)
         local asTextFlag = asText == true
         local segments = Json.parsePath(p)
 
-        return setmetatable({}, {__index = Expression}, {
+        return {
             _raw_json = true,
             _pathSegments = segments,
             _asText = asTextFlag,
             _jsonColumn = self._column or pathStr,
-        })
+        }
     end
 
-    ----------------------------------------------------------------
-    -- Bulk JSON update methods on Query/Entity (via static registration)
-    ----------------------------------------------------------------
-
-    -- These are NOT methods on Expression instances but static helpers
-    -- accessible via: Entity:jsonSet(table, map, where)
-    -- They are registered externally in init.lua when the Entity module is loaded.
+    -- jsonSet, jsonRemove, jsonMerge — deferred to future PR (update operations)
 end
+

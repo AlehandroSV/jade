@@ -116,4 +116,106 @@ describe("JSON Operators", function()
             assert.is_true(string.find(sql, "JSON_CONTAINS_PATH") ~= nil)
         end)
     end)
+
+    ----------------------------------------------------------------
+    -- Single-key shortcut (no dots in path)
+    ----------------------------------------------------------------
+
+    describe("Sql quoting via Quoting.quoteIdentifier", function()
+        it("pgSelectSql uses double-quoted identifier", function()
+            local sql = Json.pgSelectSql("metadata", {"email"}, false)
+            assert.is_true(sql:find('"metadata"') ~= nil)
+        end)
+
+        it("mySelectSql uses quoted identifier", function()
+            local sql = Json.mySelectSql("metadata", {"email"}, false)
+            assert.is_true(sql:find('JSON_EXTRACT') ~= nil)
+        end)
+
+        it("sqliteSelectSql uses quoted identifier", function()
+            local sql = Json.sqliteSelectSql("metadata", {"email"}, false)
+            assert.is_true(sql:find('"metadata"') ~= nil)
+        end)
+
+        it("pgJsonContainsSql uses quoted identifier", function()
+            local sql = Json.pgJsonContainsSql("metadata", {"role"}, '{"role":"admin"}')
+            assert.is_true(sql:find('"metadata"') ~= nil)
+            assert.is_true(sql:find("@>") ~= nil)
+        end)
+
+        it("myJsonContainsSql uses quoted identifier", function()
+            local sql = Json.myJsonContainsSql("metadata", {"role"}, '["admin"]')
+            assert.is_true(sql:find('JSON_CONTAINS') ~= nil)
+        end)
+
+        it("sqliteJsonContainsSql uses quoted identifier", function()
+            local sql = Json.sqliteJsonContainsSql("metadata", {"role"}, 'test')
+            assert.is_true(sql:find('json_extract') ~= nil)
+            assert.is_true(sql:find('"metadata"') ~= nil)
+        end)
+
+        it("pgJsonExistsSql uses quoted identifier", function()
+            local sql = Json.pgJsonExistsSql("metadata", {"role"})
+            assert.is_true(sql:find('"metadata" ? ?') ~= nil)
+        end)
+
+        it("myJsonExistsSql uses quoted identifier", function()
+            local sql = Json.myJsonExistsSql("metadata", {"role"})
+            assert.is_true(sql:find('JSON_CONTAINS_PATH') ~= nil)
+        end)
+
+        it("sqliteJsonExistsSql uses quoted identifier", function()
+            local sql = Json.sqliteJsonExistsSql("metadata", {"role"})
+            assert.is_true(sql:find('json_length(json_extract') ~= nil)
+            assert.is_true(sql:find('"metadata"') ~= nil)
+        end)
+    end)
+
+    ----------------------------------------------------------------
+    -- JSON special character escaping (injection prevention)
+    ----------------------------------------------------------------
+
+    describe("Expression jsonContains escaping", function()
+        local ExprBase = require("jade.query.expression")
+        local expr = ExprBase.new("metadata", "users")
+
+        before_each(function()
+            package.loaded["jade.query.json"] = nil
+            package.loaded["jade.util.quoting"] = nil
+            package.loaded["jade.query.condition"] = nil
+            package.loaded["jade.query.expression-json"] = nil
+        end)
+
+        after_each(function()
+            package.loaded["jade.query.json"] = nil
+            package.loaded["jade.util.quoting"] = nil
+            package.loaded["jade.query.condition"] = nil
+            package.loaded["jade.query.expression-json"] = nil
+        end)
+
+        it("escapes double quotes in key value", function()
+            local Cond = require("jade.query.condition")
+            Cond.new = function(col, op, val, tbl)
+                assert.are.equal(col, "metadata")
+                assert.are.equal(op, "@>")
+                -- Should contain escaped quote
+                assert.is_true(val:find('\\"') ~= nil or val:find(['[\\][\\]']) ~= nil)
+                return {}
+            end
+            local j = require("jade.query.expression-json")(ExprBase)
+            expr:jsonContains('key"name', 'value')
+        end)
+
+        it("escapes backslashes in key value", function()
+            local Cond = require("jade.query.condition")
+            Cond.new = function(col, op, val, tbl)
+                assert.are.equal(col, "metadata")
+                assert.are.equal(op, "@>")
+                assert.is_true(val:find('\\\\\\') ~= nil)
+                return {}
+            end
+            local j = require("jade.query.expression-json")(ExprBase)
+            expr:jsonContains('key\\name', 'value')
+        end)
+    end)
 end)

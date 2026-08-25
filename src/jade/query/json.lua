@@ -71,7 +71,7 @@ M.mySelectSql = function(colName, pathSegments, targetIsText)
             jsonPath = jsonPath .. "." .. seg
         end
     end
-    local expr = "`" .. colName .. "`, '" .. jsonPath .. "'"
+    local expr = Quoting.quoteIdentifier(colName) .. ", '" .. jsonPath .. "'"
     if targetIsText then
         return "JSON_UNQUOTE(JSON_EXTRACT(" .. expr .. "))", {}
     end
@@ -88,7 +88,7 @@ M.sqliteSelectSql = function(colName, pathSegments, targetIsText)
             jsonPath = jsonPath .. "." .. seg
         end
     end
-    local expr = "`" .. colName .. "`, '" .. jsonPath .. "'"
+    local expr = Quoting.quoteIdentifier(colName) .. ", '" .. jsonPath .. "'"
     if targetIsText then
         return "CAST(json_extract(" .. expr .. ") AS TEXT)", {}
     end
@@ -112,7 +112,7 @@ M.myJsonContainsSql = function(colName, pathSegments, boundValue)
             jsonPath = jsonPath .. "." .. seg
         end
     end
-    return "JSON_CONTAINS(`" .. colName .. "`, ?, '" .. jsonPath .. "')", {boundValue}
+    return "JSON_CONTAINS(" .. Quoting.quoteIdentifier(colName) .. ", ?, '" .. jsonPath .. "')", {boundValue}
 end
 
 --- Generate WHERE condition SQL for SQLite: json_extract(col, '$.key') = value
@@ -125,13 +125,7 @@ M.sqliteJsonContainsSql = function(colName, pathSegments, boundValue)
             jsonPath = jsonPath .. "." .. seg
         end
     end
-    return "json_extract(`" .. colName .. "`, '" .. jsonPath .. "') = ?", {boundValue}
-end
-
---- Generate WHERE condition SQL for Postgres: key @> value
-M.pgJsonContainsSql = function(colName, segments, boundValue)
-    local sql = Quoting.quoteIdentifier(colName) .. " @> ?"
-    return sql, {boundValue}
+    return "json_extract(" .. Quoting.quoteIdentifier(colName) .. ", '" .. jsonPath .. "') = ?", {boundValue}
 end
 
 --- Generate WHERE condition SQL for Postgres: key ? 'path' (exists)
@@ -140,19 +134,6 @@ M.pgJsonExistsSql = function(colName, segments)
     -- Use LIKE-based check via cast
     local pathStr = "'" .. table.concat(segments, "', '") .. "'"
     return Quoting.quoteIdentifier(colName) .. " ? ?", {pathStr}
-end
-
---- Generate WHERE condition SQL for MySQL: JSON_CONTAINS(col, value, path)
-M.myJsonContainsSql = function(colName, segments, boundValue)
-    local jsonPath = "$"
-    for _, seg in ipairs(segments) do
-        if type(seg) == "number" then
-            jsonPath = jsonPath .. "[" .. tostring(seg) .. "]"
-        else
-            jsonPath = jsonPath .. "." .. seg
-        end
-    end
-    return "JSON_CONTAINS(`" .. colName .. "`, ?, '" .. jsonPath .. "')", {boundValue}
 end
 
 --- Generate WHERE condition SQL for MySQL: JSON_CONTAINS_PATH(col, mode, path)
@@ -165,20 +146,7 @@ M.myJsonExistsSql = function(colName, segments)
             jsonPath = jsonPath .. "." .. seg
         end
     end
-    return "JSON_CONTAINS_PATH(`" .. colName .. "`, 'one', '" .. jsonPath .. "')", {}
-end
-
---- Generate WHERE condition SQL for SQLite: json_extract(col, '$.key') = value
-M.sqliteJsonContainsSql = function(colName, segments, boundValue)
-    local jsonPath = "$"
-    for _, seg in ipairs(segments) do
-        if type(seg) == "number" then
-            jsonPath = jsonPath .. "[" .. tostring(seg) .. "]"
-        else
-            jsonPath = jsonPath .. "." .. seg
-        end
-    end
-    return "`" .. colName .. "`" .. " ->> '" .. jsonPath .. "' = ?", {boundValue}
+    return "JSON_CONTAINS_PATH(" .. Quoting.quoteIdentifier(colName) .. ", 'one', '" .. jsonPath .. "')", {}
 end
 
 --- Generate WHERE condition SQL for SQLite: exists check via length
@@ -191,7 +159,8 @@ M.sqliteJsonExistsSql = function(colName, segments)
             jsonPath = jsonPath .. "." .. seg
         end
     end
-    return "json_length(json_extract(`" .. colName .. "`, '" .. jsonPath .. "')) > 0", {}
+    return "json_length(json_extract(" .. Quoting.quoteIdentifier(colName) .. ", '" .. jsonPath .. "')) > 0", {}
 end
 
 return M
+
