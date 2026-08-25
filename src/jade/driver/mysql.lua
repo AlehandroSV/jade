@@ -1,6 +1,7 @@
 local Driver = require("jade.driver.base")
 local Pool = require("jade.driver.pool")
 local Quoting = require("jade.util.quoting")
+local Json = require("jade.query.json")
 
 local MySQL = {}
 MySQL.__index = MySQL
@@ -373,12 +374,21 @@ function MySQL:generateSelect(query)
     if #query._select > 0 then
         local resolved = {}
         for _, item in ipairs(query._select) do
-            local part, part_bindings = Quoting.resolveSelectItem(item, function(name)
-                return self:quoteIdentifier(name)
-            end)
-            resolved[#resolved + 1] = part
-            for _, b in ipairs(part_bindings) do
-                bindings[#bindings + 1] = b
+            -- Handle raw JSON expressions (jsonPath results)
+            if type(item) == "table" and item._raw_json then
+                local sql_part, part_bindings = Json.mySelectSql(
+                    item._jsonColumn, item._pathSegments, item._asText
+                )
+                resolved[#resolved + 1] = sql_part
+                for _, b in ipairs(part_bindings) do bindings[#bindings + 1] = b end
+            else
+                local part, part_bindings = Quoting.resolveSelectItem(item, function(name)
+                    return self:quoteIdentifier(name)
+                end)
+                resolved[#resolved + 1] = part
+                for _, b in ipairs(part_bindings) do
+                    bindings[#bindings + 1] = b
+                end
             end
         end
         sql[#sql + 1] = select_prefix .. " " .. table.concat(resolved, ", ")
@@ -447,11 +457,19 @@ function MySQL:generateSelect(query)
     if #query._groupBy > 0 then
         local group_parts = {}
         for _, col in ipairs(query._groupBy) do
-            local col_name = col
-            if type(col) == "table" and col._column then
-                col_name = col._column
+            if type(col) == "table" and col._raw and col._raw._raw_json then
+                -- JSON expression from jsonPath
+                local sql_part, _ = Json.mySelectSql(
+                    col._raw._jsonColumn, col._raw._pathSegments, col._raw._asText
+                )
+                group_parts[#group_parts + 1] = sql_part
+            else
+                local col_name = col
+                if type(col) == "table" and col._column then
+                    col_name = col._column
+                end
+                group_parts[#group_parts + 1] = self:quoteIdentifier(col_name)
             end
-            group_parts[#group_parts + 1] = self:quoteIdentifier(col_name)
         end
         sql[#sql + 1] = "GROUP BY " .. table.concat(group_parts, ", ")
     end
@@ -473,7 +491,15 @@ function MySQL:generateSelect(query)
     if #query._orderBy > 0 then
         local order_parts = {}
         for _, o in ipairs(query._orderBy) do
-            order_parts[#order_parts + 1] = self:quoteIdentifier(o.column) .. " " .. o.dir
+            if type(o) == "table" and o._raw and o._raw._raw_json then
+                -- JSON expression from jsonPath
+                local sql_part, _ = Json.mySelectSql(
+                    o._raw._jsonColumn, o._raw._pathSegments, o._raw._asText
+                )
+                order_parts[#order_parts + 1] = sql_part .. " " .. o.dir
+            else
+                order_parts[#order_parts + 1] = self:quoteIdentifier(o.column) .. " " .. o.dir
+            end
         end
         sql[#sql + 1] = "ORDER BY " .. table.concat(order_parts, ", ")
     end

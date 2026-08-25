@@ -133,4 +133,7 @@ function Expression.raw(sql, ...)
     return raw
 end
 
+-- Load JSON extension — adds jsonContains, jsonExists, jsonPath methods
+require("jade.query.expression-json")(Expression)
+
 return Expression
