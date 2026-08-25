@@ -195,6 +195,10 @@ local test_files = {
     "query/safe_bulk_spec.lua",
     "util/log_spec.lua",
     "query/json_operators_spec.lua",
+    "cache/cache_spec.lua",
+    "encryption/encryption_spec.lua",
+    "audit/audit_spec.lua",
+    "database/database_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")
