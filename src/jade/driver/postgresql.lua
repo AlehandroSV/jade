@@ -31,6 +31,7 @@ function PostgreSQL:connect(config)
         user = config.user or "postgres",
         password = config.password or "",
         ssl = config.ssl or false,
+        sslmode = config.sslmode,              -- explicit ssl mode (CockroachDB uses this)
         ssl_verify = config.ssl_verify,
         ssl_ca = config.ssl_ca,
         ssl_cert = config.ssl_cert,
@@ -57,10 +58,12 @@ function PostgreSQL:_ensureConnected()
 
     local function connect()
         local pg = get_pgmoon().new(self._config)
-        if self._config.ssl then
-            pg:sslmode("require")
+        if self._config.ssl or self._config.sslmode then
+            -- Use explicit sslmode if specified (CockroachDB), otherwise default to require
+            local mode = self._config.sslmode or "require"
+            pg:sslmode(mode)
             if self._config.ssl_verify == false then
-                pg:sslmode("require")
+                pg:sslmode("require")  -- no verification, just encryption
             end
             if self._config.ssl_ca then
                 pg:sslrootcert(self._config.ssl_ca)
@@ -143,8 +146,9 @@ end
 -- Transaction methods
 function PostgreSQL:getConnection()
     local pg = get_pgmoon().new(self._config)
-    if self._config.ssl then
-        pg:sslmode("require")
+    if self._config.ssl or self._config.sslmode then
+        local mode = self._config.sslmode or "require"
+        pg:sslmode(mode)
         if self._config.ssl_ca then
             pg:sslrootcert(self._config.ssl_ca)
         end
