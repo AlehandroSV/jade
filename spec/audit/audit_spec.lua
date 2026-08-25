@@ -68,6 +68,7 @@ describe("Audit", function()
 
     describe("setup", function()
         it("registers audit callbacks for entity", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             Audit.setup(entity)
             assert.are.equal(1, #entity._callbacks.beforeCreate)
@@ -79,6 +80,7 @@ describe("Audit", function()
         end)
 
         it("accepts ignored fields option", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             Audit.setup(entity, { ignore = { "password", "secret" } })
             -- Should not error
@@ -86,6 +88,7 @@ describe("Audit", function()
         end)
 
         it("returns true on success", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             local result = Audit.setup(entity)
             assert.is_true(result)
@@ -98,6 +101,7 @@ describe("Audit", function()
 
     describe("callbacks", function()
         it("sets _audit_action to create in beforeCreate", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             Audit.setup(entity)
             local data = { name = "John" }
@@ -106,6 +110,7 @@ describe("Audit", function()
         end)
 
         it("sets _audit_action to update in beforeUpdate", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             Audit.setup(entity)
             local data = { name = "John" }
@@ -114,6 +119,7 @@ describe("Audit", function()
         end)
 
         it("sets _audit_action to delete in beforeDelete", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             Audit.setup(entity)
             local data = { name = "John" }
@@ -128,6 +134,7 @@ describe("Audit", function()
 
     describe("_log", function()
         it("creates audit log entry on create", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             local driver = makeMockDriver()
             entity._driver = driver
@@ -143,6 +150,7 @@ describe("Audit", function()
         end)
 
         it("creates audit log entry on update with changes", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             local driver = makeMockDriver()
             entity._driver = driver
@@ -160,6 +168,7 @@ describe("Audit", function()
         end)
 
         it("filters ignored fields from changes", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             local driver = makeMockDriver()
             entity._driver = driver
@@ -177,6 +186,7 @@ describe("Audit", function()
         end)
 
         it("does not log when no changes after filtering", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             local driver = makeMockDriver()
             entity._driver = driver
@@ -193,6 +203,7 @@ describe("Audit", function()
         end)
 
         it("handles nil instance gracefully", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             local driver = makeMockDriver()
             entity._driver = driver
@@ -203,6 +214,7 @@ describe("Audit", function()
         end)
 
         it("does nothing when entity not configured", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             local driver = makeMockDriver()
             entity._driver = driver
@@ -213,6 +225,7 @@ describe("Audit", function()
         end)
 
         it("does nothing when driver is nil", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             entity._driver = nil
             Audit.setup(entity)
@@ -228,6 +241,7 @@ describe("Audit", function()
 
     describe("_ensureTable", function()
         it("creates audit logs table", function()
+            Audit.clear()
             local driver = makeMockDriver()
             Audit._ensureTable(driver)
             assert.are.equal(1, #driver._executed_sql)
@@ -237,6 +251,7 @@ describe("Audit", function()
         end)
 
         it("uses appropriate SQL types for PostgreSQL", function()
+            Audit.clear()
             local driver = makeMockDriver()
             -- Mock PostgreSQL driver
             setmetatable(driver, { __tostring = function() return "PostgreSQL" end })
@@ -247,6 +262,7 @@ describe("Audit", function()
         end)
 
         it("uses appropriate SQL types for MySQL", function()
+            Audit.clear()
             local driver = makeMockDriver()
             setmetatable(driver, { __tostring = function() return "MySQL" end })
             Audit._ensureTable(driver)
@@ -256,6 +272,7 @@ describe("Audit", function()
         end)
 
         it("uses SQLite types by default", function()
+            Audit.clear()
             local driver = makeMockDriver()
             Audit._ensureTable(driver)
             local sql = driver._executed_sql[1].sql
@@ -270,6 +287,7 @@ describe("Audit", function()
 
     describe("query", function()
         it("queries all audit logs", function()
+            Audit.clear()
             local driver = makeMockDriver()
             Audit.query(driver)
             assert.are.equal(1, #driver._executed_sql)
@@ -279,6 +297,7 @@ describe("Audit", function()
         end)
 
         it("filters by table_name", function()
+            Audit.clear()
             local driver = makeMockDriver()
             Audit.query(driver, { table_name = "users" })
             local sql = driver._executed_sql[1].sql
@@ -287,6 +306,7 @@ describe("Audit", function()
         end)
 
         it("filters by record_id", function()
+            Audit.clear()
             local driver = makeMockDriver()
             Audit.query(driver, { record_id = 42 })
             local sql = driver._executed_sql[1].sql
@@ -295,6 +315,7 @@ describe("Audit", function()
         end)
 
         it("filters by action", function()
+            Audit.clear()
             local driver = makeMockDriver()
             Audit.query(driver, { action = "create" })
             local sql = driver._executed_sql[1].sql
@@ -303,6 +324,7 @@ describe("Audit", function()
         end)
 
         it("combines multiple filters", function()
+            Audit.clear()
             local driver = makeMockDriver()
             Audit.query(driver, { table_name = "users", action = "update" })
             local sql = driver._executed_sql[1].sql
@@ -318,6 +340,7 @@ describe("Audit", function()
 
     describe("clear", function()
         it("clears audit configuration", function()
+            Audit.clear()
             local entity = makeMockEntity("users")
             Audit.setup(entity)
             Audit.clear()

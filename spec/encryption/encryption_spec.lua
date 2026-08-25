@@ -11,18 +11,21 @@ describe("Encryption", function()
 
     describe("configure", function()
         it("sets global encryption key", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret123" })
             local config = Encryption.getConfig()
             assert.are.equal("secret123", config.key)
         end)
 
         it("sets algorithm to aes by default", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret" })
             local config = Encryption.getConfig()
             assert.are.equal("aes", config.algorithm)
         end)
 
         it("sets custom algorithm with functions", function()
+            Encryption.clear()
             local encrypt_fn = function(v, k) return v .. "_enc" end
             local decrypt_fn = function(v, k) return v:gsub("_enc$", "") end
             Encryption.configure({
@@ -38,12 +41,14 @@ describe("Encryption", function()
         end)
 
         it("sets database_encrypted flag", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret", database_encrypted = true })
             local config = Encryption.getConfig()
             assert.is_true(config.database_encrypted)
         end)
 
         it("sets fields list", function()
+            Encryption.clear()
             Encryption.configure({
                 key = "secret",
                 fields = { users = { "email", "password" } }
@@ -60,18 +65,21 @@ describe("Encryption", function()
 
     describe("setEntityConfig", function()
         it("sets config for specific entity", function()
+            Encryption.clear()
             Encryption.setEntityConfig("users", { key = "user_secret" })
             local config = Encryption.getEntityConfig("users")
             assert.are.equal("user_secret", config.key)
         end)
 
         it("falls back to global config when entity not configured", function()
+            Encryption.clear()
             Encryption.configure({ key = "global_secret" })
             local config = Encryption.getEntityConfig("users")
             assert.are.equal("global_secret", config.key)
         end)
 
         it("merges into existing entity config", function()
+            Encryption.clear()
             Encryption.setEntityConfig("users", { key = "secret1" })
             Encryption.setEntityConfig("users", { algorithm = "custom" })
             local config = Encryption.getEntityConfig("users")
@@ -80,6 +88,7 @@ describe("Encryption", function()
         end)
 
         it("errors on invalid entity_name", function()
+            Encryption.clear()
             assert.has_error(function()
                 Encryption.setEntityConfig(nil, {})
             end)
@@ -95,15 +104,18 @@ describe("Encryption", function()
 
     describe("markColumn / isEncrypted", function()
         it("marks column as encrypted", function()
+            Encryption.clear()
             Encryption.markColumn("users", "email")
             assert.is_true(Encryption.isEncrypted("users", "email"))
         end)
 
         it("returns false for unmarked column", function()
+            Encryption.clear()
             assert.is_false(Encryption.isEncrypted("users", "name"))
         end)
 
         it("respects database_encrypted flag", function()
+            Encryption.clear()
             Encryption.setEntityConfig("users", {
                 key = "secret",
                 database_encrypted = true,
@@ -112,6 +124,7 @@ describe("Encryption", function()
         end)
 
         it("respects fields list", function()
+            Encryption.clear()
             Encryption.configure({
                 key = "secret",
                 fields = { users = { "email" } }
@@ -127,6 +140,7 @@ describe("Encryption", function()
 
     describe("encryptValue / decryptValue", function()
         it("encrypts and decrypts with custom functions", function()
+            Encryption.clear()
             local encrypt_fn = function(v, k) return v .. "_encrypted" end
             local decrypt_fn = function(v, k) return v:gsub("_encrypted$", "") end
             Encryption.configure({
@@ -142,6 +156,7 @@ describe("Encryption", function()
         end)
 
         it("returns nil for nil input", function()
+            Encryption.clear()
             Encryption.configure({
                 key = "secret",
                 algorithm = "custom",
@@ -153,12 +168,14 @@ describe("Encryption", function()
         end)
 
         it("returns original value when not custom algorithm", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret", algorithm = "aes" })
             local result = Encryption.encryptValue("hello")
             assert.are.equal("hello", result)
         end)
 
         it("uses entity-specific config when provided", function()
+            Encryption.clear()
             Encryption.configure({
                 key = "global",
                 algorithm = "custom",
@@ -184,6 +201,7 @@ describe("Encryption", function()
 
     describe("wrapEncrypt / wrapDecrypt", function()
         it("wraps column for PostgreSQL encryption", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret", algorithm = "aes" })
             local driver = { _driver_type = "postgresql" }
             local wrapped = Encryption.wrapEncrypt('"email"', driver)
@@ -192,6 +210,7 @@ describe("Encryption", function()
         end)
 
         it("wraps column for MySQL encryption", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret", algorithm = "aes" })
             local driver = { _driver_type = "mysql" }
             local wrapped = Encryption.wrapEncrypt("`email`", driver)
@@ -200,12 +219,14 @@ describe("Encryption", function()
         end)
 
         it("returns original when no key configured", function()
+            Encryption.clear()
             local driver = { _driver_type = "postgresql" }
             local wrapped = Encryption.wrapEncrypt('"email"', driver)
             assert.are.equal('"email"', wrapped)
         end)
 
         it("wraps column for PostgreSQL decryption", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret", algorithm = "aes" })
             local driver = { _driver_type = "postgresql" }
             local wrapped = Encryption.wrapDecrypt('"email"', driver)
@@ -213,6 +234,7 @@ describe("Encryption", function()
         end)
 
         it("wraps column for MySQL decryption", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret", algorithm = "aes" })
             local driver = { _driver_type = "mysql" }
             local wrapped = Encryption.wrapDecrypt("`email`", driver)
@@ -221,6 +243,7 @@ describe("Encryption", function()
         end)
 
         it("errors for unsupported driver", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret", algorithm = "aes" })
             local driver = { _driver_type = "sqlite" }
             assert.has_error(function()
@@ -235,6 +258,7 @@ describe("Encryption", function()
 
     describe("prepareInsert / prepareUpdate", function()
         it("encrypts fields with custom algorithm", function()
+            Encryption.clear()
             Encryption.configure({
                 key = "secret",
                 algorithm = "custom",
@@ -252,6 +276,7 @@ describe("Encryption", function()
         end)
 
         it("marks fields for native encryption", function()
+            Encryption.clear()
             -- Ensure clean state
             Encryption.clear()
             Encryption.configure({
@@ -271,6 +296,7 @@ describe("Encryption", function()
         end)
 
         it("returns original data when no key configured", function()
+            Encryption.clear()
             local data = { name = "John", email = "john@example.com" }
             local columns = { name = true, email = true }
             local driver = {}
@@ -286,6 +312,7 @@ describe("Encryption", function()
 
     describe("decryptFields", function()
         it("decrypts fields with custom algorithm", function()
+            Encryption.clear()
             Encryption.configure({
                 key = "secret",
                 algorithm = "custom",
@@ -301,6 +328,7 @@ describe("Encryption", function()
         end)
 
         it("returns original data for native encryption", function()
+            Encryption.clear()
             Encryption.configure({
                 key = "secret",
                 algorithm = "aes",
@@ -319,6 +347,7 @@ describe("Encryption", function()
 
     describe("clear", function()
         it("clears all encryption state", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret" })
             Encryption.markColumn("users", "email")
             Encryption.setEntityConfig("posts", { key = "post_secret" })
@@ -335,15 +364,18 @@ describe("Encryption", function()
 
     describe("isEnabled / isCustom / isNative", function()
         it("isEnabled returns true when key is set", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret" })
             assert.is_true(Encryption.isEnabled())
         end)
 
         it("isEnabled returns false when key is nil", function()
+            Encryption.clear()
             assert.is_false(Encryption.isEnabled())
         end)
 
         it("isCustom returns true for custom algorithm with functions", function()
+            Encryption.clear()
             Encryption.configure({
                 key = "secret",
                 algorithm = "custom",
@@ -354,6 +386,7 @@ describe("Encryption", function()
         end)
 
         it("isNative returns true for aes algorithm with key", function()
+            Encryption.clear()
             Encryption.configure({ key = "secret", algorithm = "aes" })
             assert.is_true(Encryption.isNative())
         end)

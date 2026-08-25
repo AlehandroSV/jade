@@ -11,6 +11,7 @@ describe("Database", function()
 
     describe("register", function()
         it("registers a named connection", function()
+            Database.clear()
             Database.register("primary", { driver = "postgresql", host = "localhost" })
             local config = Database.getConfig("primary")
             assert.are.equal("postgresql", config.driver)
@@ -18,6 +19,7 @@ describe("Database", function()
         end)
 
         it("overwrites existing registration", function()
+            Database.clear()
             Database.register("primary", { driver = "postgresql" })
             Database.register("primary", { driver = "mysql" })
             local config = Database.getConfig("primary")
@@ -31,6 +33,7 @@ describe("Database", function()
 
     describe("configure", function()
         it("registers multiple databases at once", function()
+            Database.clear()
             Database.configure({
                 primary = { driver = "postgresql", host = "localhost" },
                 analytics = { driver = "mysql", host = "localhost" },
@@ -42,6 +45,7 @@ describe("Database", function()
         end)
 
         it("sets first connection as default when no default exists", function()
+            Database.clear()
             Database.configure({
                 primary = { driver = "postgresql" },
                 secondary = { driver = "mysql" },
@@ -52,6 +56,7 @@ describe("Database", function()
         end)
 
         it("does not overwrite existing default", function()
+            Database.clear()
             Database.register("first", { driver = "postgresql" })
             Database.setDefault("first")
             Database.configure({
@@ -67,11 +72,13 @@ describe("Database", function()
 
     describe("setDefault / getDefault", function()
         it("sets and gets default connection", function()
+            Database.clear()
             Database.setDefault("primary")
             assert.are.equal("primary", Database.getDefault())
         end)
 
         it("returns nil when no default set", function()
+            Database.clear()
             assert.is_nil(Database.getDefault())
         end)
     end)
@@ -82,6 +89,7 @@ describe("Database", function()
 
     describe("getNames", function()
         it("returns sorted list of connection names", function()
+            Database.clear()
             Database.register("zebra", { driver = "postgresql" })
             Database.register("alpha", { driver = "mysql" })
             Database.register("middle", { driver = "sqlite" })
@@ -93,6 +101,7 @@ describe("Database", function()
         end)
 
         it("returns empty list when no connections", function()
+            Database.clear()
             local names = Database.getNames()
             assert.are.equal(0, #names)
         end)
@@ -100,24 +109,28 @@ describe("Database", function()
 
     describe("getConfig", function()
         it("returns config for registered connection", function()
+            Database.clear()
             Database.register("primary", { driver = "postgresql", host = "localhost" })
             local config = Database.getConfig("primary")
             assert.are.equal("postgresql", config.driver)
         end)
 
         it("returns nil for unregistered connection", function()
+            Database.clear()
             assert.is_nil(Database.getConfig("nonexistent"))
         end)
     end)
 
     describe("remove", function()
         it("removes a connection", function()
+            Database.clear()
             Database.register("primary", { driver = "postgresql" })
             Database.remove("primary")
             assert.is_nil(Database.getConfig("primary"))
         end)
 
         it("does not error when removing nonexistent connection", function()
+            Database.clear()
             Database.remove("nonexistent")
         end)
     end)
@@ -128,6 +141,7 @@ describe("Database", function()
 
     describe("connect", function()
         it("errors when connection not registered", function()
+            Database.clear()
             assert.has_error(function()
                 Database.connect("nonexistent")
             end, "Database 'nonexistent' not registered. Use jade.database.register() first.")
@@ -143,6 +157,7 @@ describe("Database", function()
 
     describe("addReplicas / getReplica", function()
         it("registers read replicas for primary", function()
+            Database.clear()
             Database.register("primary", { driver = "postgresql" })
             Database.addReplicas("primary", {
                 { driver = "postgresql", host = "replica1" },
@@ -153,6 +168,7 @@ describe("Database", function()
         end)
 
         it("returns empty list when no replicas", function()
+            Database.clear()
             local replicas = Database.getReplicas("primary")
             assert.are.equal(0, #replicas)
         end)
@@ -168,6 +184,7 @@ describe("Database", function()
         -- Note: Actual transaction tests require real drivers
         -- These would be integration tests
         it("exists as a function", function()
+            Database.clear()
             assert.is_function(Database.transaction)
         end)
     end)
@@ -180,6 +197,7 @@ describe("Database", function()
         -- Note: Actual execute tests require real drivers
         -- These would be integration tests
         it("exists as a function", function()
+            Database.clear()
             assert.is_function(Database.execute)
         end)
     end)
@@ -192,6 +210,7 @@ describe("Database", function()
         -- Note: Actual health check tests require real drivers
         -- These would be integration tests
         it("exists as a function", function()
+            Database.clear()
             assert.is_function(Database.healthCheck)
         end)
     end)
@@ -202,6 +221,7 @@ describe("Database", function()
 
     describe("clear", function()
         it("clears all connections and default", function()
+            Database.clear()
             Database.register("primary", { driver = "postgresql" })
             Database.setDefault("primary")
             Database.clear()
