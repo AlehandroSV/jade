@@ -145,14 +145,21 @@ function Query:orderBy(column, direction)
     local col_name = column
     local dir = direction or "ASC"
 
-    if type(column) == "table" and column._column then
-        col_name = column._column
+    if type(column) == "table" then
+        -- Support Expression columns and raw JSON expressions
+        if column._raw_json then
+            col_name = "_json"
+        elseif column._column then
+            col_name = column._column
+        else
+            return self -- Invalid column type, ignore silently
+        end
     end
 
     -- Validate column name and direction
     Security.validateOrderBy(col_name, dir)
 
-    self._orderBy[#self._orderBy + 1] = { column = col_name, dir = dir }
+    self._orderBy[#self._orderBy + 1] = { column = col_name, dir = dir, _raw = column }
     return self
 end
 
@@ -220,7 +227,12 @@ function Query:groupBy(...)
         cols = cols[1]
     end
     for _, col in ipairs(cols) do
-        self._groupBy[#self._groupBy + 1] = col
+        -- Support JSON expressions (like jsonPath results)
+        if type(col) == "table" and col._raw_json then
+            self._groupBy[#self._groupBy + 1] = { column = "_json", _raw = col }
+        else
+            self._groupBy[#self._groupBy + 1] = col
+        end
     end
     return self
 end
