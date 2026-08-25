@@ -12,7 +12,10 @@ return function(Expression)
 
     --- jsonContains(keyOrPath, value)
     --- Checks if JSON key/value exists (uses @> for PG, JSON_CONTAINS for MySQL).
-    -- Usage: User:where(User.metadata:jsonContains("role", "admin"))
+    --- Escapes special characters in single-key paths to prevent injection.
+    --- @param keyOrPath string|number JSON key or dot-path (e.g. "role" or "settings.theme")
+    --- @param value any Value to search for
+    --- @return Jade.Condition WHERE condition object matching JSON content
     Expression.jsonContains = function(self, keyOrPath, value)
         local p = tostring(keyOrPath):gsub("^%s*(.-)%s*$", "%1")
         local c = self._column or keyOrPath
@@ -55,14 +58,14 @@ return function(Expression)
         end
 
         -- For now, default to PostgreSQL behavior
-        -- The query builder will resolve the actual driver when executing
-        local driver_hint = self._driver_type or "postgresql"
         return makeCond(driver_hint)
     end
 
     --- jsonExists(keyOrPath)
-    --- Checks if JSON key/path exists.
-    -- Usage: User:where(User.metadata:jsonExists("config.theme"))
+    --- Checks if a JSON key or nested path exists in the column.
+    --- Uses the native `?` operator for PostgreSQL, JSON_CONTAINS_PATH for MySQL.
+    --- @param keyOrPath string|number JSON key or dot-path (e.g. "theme" or "settings.theme")
+    --- @return Jade.Condition WHERE condition object matching EXISTS check
     Expression.jsonExists = function(self, keyOrPath)
         local p = tostring(keyOrPath):gsub("^%s*(.-)%s*$", "%1")
         local c = self._column or keyOrPath
@@ -109,12 +112,11 @@ return function(Expression)
 
     --- jsonPath(path, [asText])
     --- Extracts a value from JSON column for use in SELECT, ORDER BY, etc.
-    -- Returns a lightweight marker table. Drivers recognise it via the `_raw_json` field
-    -- and delegate SQL generation to the Json module. Does NOT inherit Expression methods.
-    -- Usage:
-    --   User:select("name", User.metadata:jsonPath("email"))
-    --   User:orderBy(User.metadata:jsonPath("score"), "DESC")
-    --   User:groupBy(User.metadata:jsonPath("department"))
+    --- Returns a lightweight marker table recognised by drivers via `_raw_json`.
+    --- Supports nested dot-paths and bracket array notation (e.g. "a.b[0].c").
+    --- @param pathStr string Dot-path or bracketed path into JSON (e.g. "email" or "settings.theme")
+    --- @param asText? boolean If true, cast to text (PG `->>`, MySQL `JSON_UNQUOTE`)
+    --- @return { _raw_json: boolean, _pathSegments: any[], _asText: boolean, _jsonColumn: string }
     Expression.jsonPath = function(self, pathStr, asText)
         local p = tostring(pathStr):gsub("^%s*(.-)%s*$", "%1")
         local asTextFlag = asText == true

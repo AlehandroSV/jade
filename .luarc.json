@@ -6,7 +6,19 @@
         "globals": ["vim", "jit", "unpack", "table"]
     },
     "workspace": {
-        "library": ["src"]
+        "library": [
+            "src/jade",
+            "${workspaceFolder}/src"
+        ],
+        "ignoreDir": ["/%.git"],
+        "checkThirdParty": "Disabled"
     },
-    "unusedLocalExclude": ["_*"]
+    "unusedLocalExclude": ["_*"],
+    "format": {
+        "enable": true,
+        "defaultConfig": {
+            "indent_style": "spaces",
+            "indent_size": 4
+        }
+    }
 }
