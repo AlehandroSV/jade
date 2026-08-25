@@ -110,6 +110,65 @@ Jade supports four database drivers out of the box:
 | MariaDB | luasql-mysql | RETURNING (10.5+), JSON, UUID, INET4/6, auto version detection |
 | SQLite | luasql-sqlite3 | AUTOINCREMENT, WAL mode, foreign_keys pragma |
 
+### Supported Databases
+
+Jade works with any database that uses the PostgreSQL or MySQL wire protocol. This includes distributed databases like CockroachDB and TiDB — no code changes needed.
+
+| Database | Version | Wire Protocol | Status | Notes |
+|----------|---------|---------------|--------|-------|
+| PostgreSQL | 12+ | PostgreSQL | ✅ Full support | Default driver |
+| CockroachDB | 22+ | PostgreSQL | ✅ Full support | Use `postgresql` driver, port `26257`, `sslmode = "require"` |
+| MySQL | 8.0+ | MySQL | ✅ Full support | Default driver |
+| TiDB | 6.0+ | MySQL | ✅ Full support | Use `mysql` driver, port `4000` |
+| MariaDB | 10.6+ | MySQL | ✅ Full support | Uses `luasql-mysql` driver |
+| SQLite | 3.35+ | Native | ✅ Full support | File-based, no server needed |
+
+#### CockroachDB
+
+CockroachDB is wire-compatible with PostgreSQL. Use the same `postgresql` driver:
+
+```lua
+jade.configure({
+    database = {
+        driver = "postgresql",
+        host = "localhost",
+        port = 26257,           -- CockroachDB default port
+        database = "myapp",
+        user = "root",
+        ssl = true,
+        sslmode = "require",    -- required for CockroachDB
+    }
+})
+```
+
+Key differences from standard PostgreSQL:
+- **JSONB**: supported ✅
+- **RETURNING clause**: supported ✅
+- **DDL transactions**: supported ✅ (all DDL runs inside transactions)
+- **Default port**: `26257` (not `5432`)
+
+#### TiDB
+
+TiDB is wire-compatible with MySQL. Use the standard `mysql` driver:
+
+```lua
+jade.configure({
+    database = {
+        driver = "mysql",
+        host = "localhost",
+        port = 4000,            -- TiDB default port
+        database = "myapp",
+        user = "root",
+    }
+})
+```
+
+Key differences from standard MySQL:
+- **RETURNING clause**: supported in TiDB 8.0+
+- **JSON type**: stored as JSON (not JSONB) — use `json` column type in schema
+- **DDL transactions**: not supported (standard MySQL behavior)
+- **Default port**: `4000` (not `3306`)
+
 ```lua
 -- PostgreSQL
 jade.configure({ database = { driver = "postgresql", ... } })
