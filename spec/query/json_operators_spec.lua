@@ -186,13 +186,6 @@ describe("JSON Operators", function()
             package.loaded["jade.query.expression-json"] = nil
         end)
 
-        after_each(function()
-            package.loaded["jade.query.json"] = nil
-            package.loaded["jade.util.quoting"] = nil
-            package.loaded["jade.query.condition"] = nil
-            package.loaded["jade.query.expression-json"] = nil
-        end)
-
         it("escapes double quotes in key value", function()
             local Cond = require("jade.query.condition")
             Cond.new = function(col, op, val, tbl)
