@@ -252,6 +252,8 @@ describe("Encryption", function()
         end)
 
         it("marks fields for native encryption", function()
+            -- Ensure clean state
+            Encryption.clear()
             Encryption.configure({
                 key = "secret",
                 algorithm = "aes",
@@ -261,7 +263,10 @@ describe("Encryption", function()
             local columns = { name = true, email = true }
             local driver = {}
             local result, markers = Encryption.prepareInsert(data, "users", columns, driver)
+            -- For native encryption, values should remain unchanged
+            assert.are.equal("John", result.name)
             assert.are.equal("john@example.com", result.email)
+            -- But should be marked for SQL-level encryption
             assert.is_true(markers.email)
         end)
 

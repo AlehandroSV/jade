@@ -199,7 +199,7 @@ describe("JSON Operators", function()
                 assert.are.equal(col, "metadata")
                 assert.are.equal(op, "@>")
                 -- Should contain escaped quote
-                assert.is_true(val:find('\\"') ~= nil or val:find(['[\\][\\]']) ~= nil)
+                assert.is_true(val:find('\\"') ~= nil or val:find('\\\\') ~= nil)
                 return {}
             end
             local j = require("jade.query.expression-json")(ExprBase)
@@ -211,7 +211,7 @@ describe("JSON Operators", function()
             Cond.new = function(col, op, val, tbl)
                 assert.are.equal(col, "metadata")
                 assert.are.equal(op, "@>")
-                assert.is_true(val:find('\\\\\\') ~= nil)
+                assert.is_true(val:find('\\\\') ~= nil)
                 return {}
             end
             local j = require("jade.query.expression-json")(ExprBase)
