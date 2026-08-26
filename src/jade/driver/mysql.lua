@@ -311,6 +311,13 @@ function MySQL:execute(sql, bindings)
         return self._pool:execute(sql, bindings)
     end
 
+    -- Apply rate limiting if enabled (use connection ID or table name as key)
+    local RateLimit = require("jade.security.ratelimit")
+    if RateLimit.isEnabled() then
+        local key = self._conn and tostring(self._conn) or self._config and self._config.database or "default"
+        RateLimit.check(key)
+    end
+
     -- Otherwise use shared connection
     self:_ensureConnected()
     local converted_sql, params = convertPlaceholders(sql, bindings)
