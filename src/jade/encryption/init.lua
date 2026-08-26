@@ -20,6 +20,36 @@ local encrypted_columns = {}
 -- Warn once about global configure when per-entity configs exist
 local _warned_global_over_entity = false
 
+-- Validate and sanitize file path to prevent directory traversal and arbitrary file loading
+local function validatePath(path, allowedExtension)
+    if type(path) ~= "string" or path == "" then
+        error("Invalid path: must be a non-empty string")
+    end
+    
+    -- Reject paths with null bytes
+    if path:find("\0") then
+        error("Invalid path: contains null byte")
+    end
+    
+    -- Reject directory traversal attempts
+    if path:match("%.%.%/?") or path:match("/%.%.") then
+        error("Invalid path: directory traversal not allowed")
+    end
+    
+    -- Reject absolute paths outside current directory context
+    -- Allow relative paths only
+    if path:match("^/") or (path:match("^%a:") and not path:match("^%a:[\\/]")) then
+        error("Invalid path: use relative paths only")
+    end
+    
+    -- Validate extension
+    if allowedExtension and not path:match("%." .. allowedExtension .. "$") then
+        error("Invalid path: must have ." .. allowedExtension .. " extension")
+    end
+    
+    return true
+end
+
 --- Set encryption config for a specific entity
 --- @param entity_name string The entity/table name
 --- @param opts table|nil Options: {key?, algorithm?, database_encrypted?, fields?, encrypt_fn?, decrypt_fn?}
@@ -90,6 +120,7 @@ end
 --- @param file_path string Path to the Lua file
 --- @return function The loaded function
 function M.loadEncryptionFile(file_path)
+    validatePath(file_path, "lua")
     local loader, err = loadfile(file_path)
     if not loader then
         error("Failed to load encryption file '" .. file_path .. "': " .. tostring(err))
