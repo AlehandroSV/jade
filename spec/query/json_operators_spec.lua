@@ -166,7 +166,7 @@ describe("JSON Operators", function()
 
         it("sqliteJsonExistsSql uses quoted identifier", function()
             local sql = Json.sqliteJsonExistsSql("metadata", {"role"})
-            assert.is_true(sql:find('json_length(json_extract') ~= nil)
+            assert.is_true(sql:find('json_length(json_extract', 1, true) ~= nil)
             assert.is_true(sql:find('"metadata"') ~= nil)
         end)
     end)
@@ -186,20 +186,13 @@ describe("JSON Operators", function()
             package.loaded["jade.query.expression-json"] = nil
         end)
 
-        after_each(function()
-            package.loaded["jade.query.json"] = nil
-            package.loaded["jade.util.quoting"] = nil
-            package.loaded["jade.query.condition"] = nil
-            package.loaded["jade.query.expression-json"] = nil
-        end)
-
         it("escapes double quotes in key value", function()
             local Cond = require("jade.query.condition")
             Cond.new = function(col, op, val, tbl)
                 assert.are.equal(col, "metadata")
                 assert.are.equal(op, "@>")
                 -- Should contain escaped quote
-                assert.is_true(val:find('\\"') ~= nil or val:find(['[\\][\\]']) ~= nil)
+                assert.is_true(val:find('\\"') ~= nil or val:find('\\\\') ~= nil)
                 return {}
             end
             local j = require("jade.query.expression-json")(ExprBase)
@@ -211,7 +204,7 @@ describe("JSON Operators", function()
             Cond.new = function(col, op, val, tbl)
                 assert.are.equal(col, "metadata")
                 assert.are.equal(op, "@>")
-                assert.is_true(val:find('\\\\\\') ~= nil)
+                assert.is_true(val:find('\\\\') ~= nil)
                 return {}
             end
             local j = require("jade.query.expression-json")(ExprBase)

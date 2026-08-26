@@ -5,6 +5,8 @@ local connections = {}
 
 -- Default connection name
 local default_connection = nil
+local replicas = {}
+local replica_index = {}
 
 -- Register a named database connection
 function M.register(name, config)
@@ -61,6 +63,8 @@ end
 function M.clear()
     connections = {}
     default_connection = nil
+    replicas = {}
+    replica_index = {}
 end
 
 -- Configure multiple databases from a config table
@@ -83,8 +87,6 @@ function M.configure(databases)
 end
 
 -- Read replica support
-local replicas = {}
-local replica_index = {}
 
 -- Register read replicas for a primary connection
 -- M.addReplicas("primary", { replica1_config, replica2_config })

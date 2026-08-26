@@ -84,6 +84,9 @@ function Audit._log(entity, instance, action, changes, raw_data)
         Audit._ensureTable(driver)
     end)
 
+    -- For updates with no changes after filtering, skip logging
+    if action == "update" and not changes then return end
+
     local changes_json = nil
     if changes then
         local ok, encoded = pcall(require, "dkjson")

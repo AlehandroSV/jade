@@ -13,6 +13,36 @@ local DEFAULT_ENV_FALLBACKS = {
     "RACK_ENV",      -- Ruby (genérico)
 }
 
+-- Validate and sanitize file path to prevent directory traversal
+-- Exported as M.validatePath for testability
+function M.validatePath(path, allowedExtension)
+    if type(path) ~= "string" or path == "" then
+        error("Invalid path: rejected by security policy")
+    end
+
+    -- Reject paths with null bytes
+    if path:find("\0", 1, true) then
+        error("Invalid path: rejected by security policy")
+    end
+
+    -- Reject directory traversal attempts (.. in any context: ../, ..\, etc.)
+    if path:find("..", 1, true) then
+        error("Invalid path: rejected by security policy")
+    end
+
+    -- Reject absolute paths (Unix / or Windows drive letter with separator)
+    if path:match("^/") or path:match("^%a:[\\/]") then
+        error("Invalid path: rejected by security policy")
+    end
+
+    -- Validate extension (allowedExtension must be alphanumeric)
+    if allowedExtension and not path:match("%." .. allowedExtension .. "$") then
+        error("Invalid path: rejected by security policy")
+    end
+
+    return true
+end
+
 -- Environment detection with extensible fallbacks
 local function detectEnvironment()
     local fallbacks = DEFAULT_ENV_FALLBACKS
@@ -68,6 +98,7 @@ end
 
 function M.load(path)
     local config_path = path or "jade.config.lua"
+    M.validatePath(config_path, "lua")
     local loader, err = loadfile(config_path)
     if not loader then
         error("Failed to load config: " .. tostring(err))
@@ -82,17 +113,37 @@ function M.loadForEnvironment(basePath)
     local env = detectEnvironment()
     local base_dir = basePath or "."
 
+    -- Validate basePath for traversal (basePath is developer-provided, so absolute is allowed)
+    if base_dir:find("..", 1, true) or base_dir:find("\0", 1, true) then
+        error("Invalid basePath: rejected by security policy")
+    end
+
     -- Load base config
     local base_config = {}
     local base_file = base_dir .. "/jade.config.lua"
-    local ok, result = pcall(M.load, base_file)
+    local ok, result = pcall(function()
+        -- Validate constructed path against traversal (env may be attacker-controlled)
+        if base_file:find("..", 1, true) or base_file:find("\0", 1, true) then
+            error("Invalid path: rejected by security policy")
+        end
+        local loader, err = loadfile(base_file)
+        if not loader then error(err) end
+        return loader()
+    end)
     if ok then
         base_config = result
     end
 
     -- Load environment-specific config and merge
     local env_file = base_dir .. "/jade.config." .. env .. ".lua"
-    local env_ok, env_result = pcall(M.load, env_file)
+    local env_ok, env_result = pcall(function()
+        if env_file:find("..", 1, true) or env_file:find("\0", 1, true) then
+            error("Invalid path: rejected by security policy")
+        end
+        local loader, err = loadfile(env_file)
+        if not loader then error(err) end
+        return loader()
+    end)
     if env_ok and env_result then
         config = deepMerge(base_config, env_result)
     else
