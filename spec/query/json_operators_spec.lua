@@ -166,7 +166,7 @@ describe("JSON Operators", function()
 
         it("sqliteJsonExistsSql uses quoted identifier", function()
             local sql = Json.sqliteJsonExistsSql("metadata", {"role"})
-            assert.is_true(sql:find('json_length(json_extract') ~= nil)
+            assert.is_true(sql:find('json_length(json_extract', 1, true) ~= nil)
             assert.is_true(sql:find('"metadata"') ~= nil)
         end)
     end)

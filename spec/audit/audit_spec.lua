@@ -292,7 +292,7 @@ describe("Audit", function()
             Audit.query(driver)
             assert.are.equal(1, #driver._executed_sql)
             local sql = driver._executed_sql[1].sql
-            assert.is_true(sql:find("SELECT * FROM") ~= nil)
+            assert.is_true(sql:find("SELECT * FROM", 1, true) ~= nil)
             assert.is_true(sql:find("ORDER BY created_at DESC") ~= nil)
         end)
 

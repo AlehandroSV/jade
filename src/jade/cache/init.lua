@@ -42,18 +42,20 @@ function MemoryStore.new(opts)
         data = {},
         ttls = {},
         max_size = opts.max_size or 1000,
+        counter = 0,
     }, MemoryStore)
 end
 
 function MemoryStore:get(key)
     local entry = self.data[key]
     if entry == nil then return nil end
-    if self.ttls[key] and os.time() > self.ttls[key] then
+    if self.ttls[key] and os.time() >= self.ttls[key] then
         self.data[key] = nil
         self.ttls[key] = nil
         return nil
     end
-    entry.accessed_at = os.time()
+    self.counter = self.counter + 1
+    entry.accessed_at = self.counter
     return entry.value
 end
 
@@ -61,7 +63,8 @@ function MemoryStore:set(key, value, ttl)
     if not self.data[key] and self:size() >= self.max_size then
         self:evict()
     end
-    self.data[key] = { value = value, accessed_at = os.time() }
+    self.counter = self.counter + 1
+    self.data[key] = { value = value, accessed_at = self.counter }
     if ttl then
         self.ttls[key] = os.time() + ttl
     end

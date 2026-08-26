@@ -22,8 +22,9 @@ local M = {
 
 function M.describe(name, fn)
     print("\n" .. name)
+    local parent_before_each = M._before_each
     fn()
-    M._before_each = nil
+    M._before_each = parent_before_each
 end
 
 function M.it(name, fn)

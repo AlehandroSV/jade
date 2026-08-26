@@ -47,11 +47,11 @@ M.pgSelectSql = function(colName, pathSegments, targetIsText)
     for _, seg in ipairs(pathSegments) do
         if type(seg) == "number" then
             sql = sql .. " -> " .. tostring(seg)
-            if targetIsText then sql = sql .. " :: text" end
+            if targetIsText then sql = sql .. "::text" end
         else
             bindings[#bindings + 1] = seg
             if targetIsText then
-                sql = sql .. " ->> ?"
+                sql = sql .. " ->> ?::text"
             else
                 sql = sql .. " -> ?"
             end
