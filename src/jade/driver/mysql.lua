@@ -59,10 +59,10 @@ local function validateEnvName(name)
     -- Environment variable names must be alphanumeric and underscores only
     -- This prevents command injection through malicious environment variable names
     if type(name) ~= "string" or name == "" then
-        error("Invalid environment variable name: must be a non-empty string")
+        error("Invalid environment variable name: rejected by security policy")
     end
     if not name:match("^[A-Z_][A-Z0-9_]*$") then
-        error("Invalid environment variable name: " .. name .. " (must contain only uppercase letters, digits, and underscores)")
+        error("Invalid environment variable name: rejected by security policy")
     end
     return true
 end

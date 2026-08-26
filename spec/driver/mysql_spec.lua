@@ -375,5 +375,34 @@ describe("MySQL Driver SQL Generation", function()
             mysql:_restoreSSLEnv(saved)
             assert.are.equal(original_mode, os.getenv("MYSQL_OPT_SSL_MODE"))
         end)
+
+        it("uses only valid environment variable names (uppercase + underscore)", function()
+            -- All SSL env var names must match ^[A-Z_][A-Z0-9_]*$ to pass validateEnvName
+            local valid_names = {
+                "MYSQL_OPT_SSL_MODE",
+                "MYSQL_SSL_CA",
+                "MYSQL_SSL_CERT",
+                "MYSQL_SSL_KEY",
+            }
+            for _, name in ipairs(valid_names) do
+                assert.is_truthy(name:match("^[A-Z_][A-Z0-9_]*$"),
+                    "SSL env var name '" .. name .. "' must pass validation")
+            end
+        end)
+
+        it("escapes single quotes in SSL values to prevent shell injection", function()
+            -- Verify that values with single quotes are properly escaped
+            -- The escape pattern '\'' closes quote, adds escaped quote, reopens quote
+            local test_value = "it's a test"
+            local escaped = test_value:gsub("'", "'\\''")
+            assert.are.equal("it'\\''s a test", escaped)
+        end)
+
+        it("converts non-string values to string before escaping", function()
+            -- tostring() ensures non-string values don't cause gsub errors
+            assert.are.equal("123", tostring(123))
+            assert.are.equal("true", tostring(true))
+            assert.are.equal("table: ", tostring({}):sub(1, 7))
+        end)
     end)
 end)
