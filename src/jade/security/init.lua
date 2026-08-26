@@ -6,6 +6,9 @@ M.sanitizer = require("jade.security.sanitizer")
 -- Validator module
 M.validator = require("jade.security.validator")
 
+-- Rate limiter module
+M.ratelimit = require("jade.security.ratelimit")
+
 -- Initialize security module
 function M.init(options)
     options = options or {}

@@ -1,12 +1,40 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Provides autocomplete and type checking for Jade's public API
+--- @see https://github.com/AlehandroSV/jade/issues/65
+
 local Expression = require("jade.query.expression")
 local Condition = require("jade.query.condition")
 local Instance = require("jade.entity.instance")
 local Quoting = require("jade.util.quoting")
 local Security = require("jade.security")
 
+--- @class Jade.Query : table
+--- @field _entity Jade.Entity The entity this query targets
+--- @field _table string Target table name
+--- @field _where Jade.Condition[] WHERE clause conditions
+--- @field _orderBy {column:string, dir:string}[] ORDER BY clauses
+--- @field _limit? integer LIMIT count
+--- @field _offset? integer OFFSET skip count
+--- @field _select string[] SELECT columns
+--- @field _includes string[] Eager-loaded relations
+--- @field _bindings any[] Parameter bindings
+--- @field _joins {type:string, table:string, on:any}[] JOIN definitions
+--- @field _groupBy string[] GROUP BY columns
+--- @field _having Jade.Condition[] HAVING conditions
+--- @field _distinct boolean Whether to use DISTINCT
+--- @field _cache_ttl? number Cache TTL in seconds
+--- @field _cache_key? string Cache key for this query
+--- @field _timeout? number Query timeout in milliseconds
+--- @field _include_trashed boolean Include soft-deleted records
+--- @field _only_trashed boolean Return only soft-deleted records
+--- @field _where_explicit boolean Explicit where() was called (for updateAll safety)
+
 local Query = {}
 Query.__index = Query
 
+--- Create a new Query instance targeting an entity
+--- @param entity Jade.Entity Entity to query against
+--- @return Jade.Query New query instance
 function Query.new(entity)
     return setmetatable({
         _entity = entity,
@@ -55,7 +83,9 @@ local function _copyScalars(src, dst)
     dst._where_explicit = src._where_explicit
 end
 
--- Set query timeout in milliseconds
+--- Set query execution timeout in milliseconds
+--- @param ms integer Timeout duration (must be positive)
+--- @return Jade.Query self for chaining
 function Query:timeout(ms)
     if type(ms) ~= "number" or ms <= 0 then
         error("Timeout must be a positive number in milliseconds")
@@ -64,20 +94,25 @@ function Query:timeout(ms)
     return self
 end
 
--- Include soft-deleted records in results
+--- Include soft-deleted records in results
+--- @return Jade.Query self for chaining
 function Query:withTrashed()
     self._include_trashed = true
     self._only_trashed = false
     return self
 end
 
--- Return only soft-deleted records
+--- Return only soft-deleted records
+--- @return Jade.Query self for chaining
 function Query:onlyTrashed()
     self._include_trashed = false
     self._only_trashed = true
     return self
 end
 
+--- Add WHERE condition — primary filter method
+--- @param condition string|Jade.Condition SQL string or Condition object
+--- @return Jade.Query self for chaining
 function Query:where(condition)
     if type(condition) == "table" and condition._raw and not condition.compile then
         local raw_sql = condition._raw
@@ -141,33 +176,53 @@ function Query:where(condition)
     return self
 end
 
+--- Sort results by column and direction
+--- @param column string|Jade.Expression Column name or Expression object
+--- @param direction? "ASC"|"DESC" Sort direction (default: "ASC")
+--- @return Jade.Query self for chaining
 function Query:orderBy(column, direction)
     local col_name = column
     local dir = direction or "ASC"
 
-    if type(column) == "table" and column._column then
-        col_name = column._column
+    if type(column) == "table" then
+        -- Support Expression columns and raw JSON expressions
+        if column._raw_json then
+            col_name = "_json"
+        elseif column._column then
+            col_name = column._column
+        else
+            return self -- Invalid column type, ignore silently
+        end
     end
 
     -- Validate column name and direction
     Security.validateOrderBy(col_name, dir)
 
-    self._orderBy[#self._orderBy + 1] = { column = col_name, dir = dir }
+    self._orderBy[#self._orderBy + 1] = { column = col_name, dir = dir, _raw = column }
     return self
 end
 
+--- Limit number of returned rows
+--- @param n integer Maximum rows to return
+--- @return Jade.Query self for chaining
 function Query:limit(n)
     Security.validateLimit(n)
     self._limit = n
     return self
 end
 
+--- Skip first N rows for pagination
+--- @param n integer Number of rows to skip
+--- @return Jade.Query self for chaining
 function Query:offset(n)
     Security.validateOffset(n)
     self._offset = n
     return self
 end
 
+--- Specify which columns to select from the table
+--- @vararg string Column names or SQL expressions
+--- @return Jade.Query self for chaining
 function Query:select(...)
     local cols = { ... }
     if #cols == 1 and type(cols[1]) == "table" then
@@ -180,62 +235,100 @@ function Query:select(...)
     return self
 end
 
+--- Eager-load a relation by name (avoids N+1 queries)
+--- @param relation_name string Name of relation to load
+--- @return Jade.Query self for chaining
 function Query:include(relation_name)
     self._includes[#self._includes + 1] = relation_name
     return self
 end
 
+--- Select only distinct rows
+--- @return Jade.Query self for chaining
 function Query:distinct()
     self._distinct = true
     return self
 end
 
+--- INNER JOIN with another table
+--- @param table_name string Table name
+--- @param on_condition string|table Join condition
+--- @return Jade.Query self for chaining
 function Query:join(table_name, on_condition)
     Security.validateJoinTableName(table_name)
     self._joins[#self._joins + 1] = { type = "INNER", table = table_name, on = on_condition }
     return self
 end
 
+--- LEFT OUTER JOIN with another table
+--- @param table_name string Table name
+--- @param on_condition string|table Join condition
+--- @return Jade.Query self for chaining
 function Query:leftJoin(table_name, on_condition)
     Security.validateJoinTableName(table_name)
     self._joins[#self._joins + 1] = { type = "LEFT", table = table_name, on = on_condition }
     return self
 end
 
+--- RIGHT OUTER JOIN with another table
+--- @param table_name string Table name
+--- @param on_condition string|table Join condition
+--- @return Jade.Query self for chaining
 function Query:rightJoin(table_name, on_condition)
     Security.validateJoinTableName(table_name)
     self._joins[#self._joins + 1] = { type = "RIGHT", table = table_name, on = on_condition }
     return self
 end
 
+--- INNER JOIN (alias for join())
+--- @param table_name string Table name
+--- @param on_condition string|table Join condition
+--- @return Jade.Query self for chaining
 function Query:innerJoin(table_name, on_condition)
     Security.validateJoinTableName(table_name)
     self._joins[#self._joins + 1] = { type = "INNER", table = table_name, on = on_condition }
     return self
 end
 
+--- GROUP BY one or more columns
+--- @vararg string Column names
+--- @return Jade.Query self for chaining
 function Query:groupBy(...)
     local cols = { ... }
     if #cols == 1 and type(cols[1]) == "table" then
         cols = cols[1]
     end
     for _, col in ipairs(cols) do
-        self._groupBy[#self._groupBy + 1] = col
+        -- Support JSON expressions (like jsonPath results)
+        if type(col) == "table" and col._raw_json then
+            self._groupBy[#self._groupBy + 1] = { column = "_json", _raw = col }
+        else
+            self._groupBy[#self._groupBy + 1] = col
+        end
     end
     return self
 end
 
+--- Add HAVING clause for grouped queries
+--- @param condition string|Jade.Condition Filter after GROUP BY
+--- @return Jade.Query self for chaining
 function Query:having(condition)
     self._having[#self._having + 1] = condition
     return self
 end
 
+--- Set query result cache TTL in seconds
+--- @param ttl number Cache duration in seconds (0 to disable)
+--- @param key? string Optional cache key override
+--- @return Jade.Query self for chaining
 function Query:cache(ttl, key)
     self._cache_ttl = ttl
     self._cache_key = key
     return self
 end
 
+--- Execute the query and return all matching rows as Instance objects
+--- @return table<string, any>[] Array of entity instances (empty array if no matches)
 function Query:get()
     -- Check cache if enabled
     if self._cache_ttl then
@@ -562,6 +655,8 @@ function Query:_eagerLoad(instances)
     end
 end
 
+--- Execute the query and return only the first matching row
+--- @return table|string|nil Instance of the first result or nil if no matches
 function Query:first()
     local q = Query.new(self._entity)
     _copyArrays(self, q); _copyScalars(self, q)
@@ -569,6 +664,9 @@ function Query:first()
     return q:get()[1]
 end
 
+--- Find a record by its primary key
+--- @param id string|integer Primary key value
+--- @return table|string|nil The matched instance or nil if not found
 function Query:find(id)
     local q = Query.new(self._entity)
     _copyArrays(self, q); _copyScalars(self, q)

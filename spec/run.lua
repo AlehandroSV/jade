@@ -22,8 +22,9 @@ local M = {
 
 function M.describe(name, fn)
     print("\n" .. name)
+    local parent_before_each = M._before_each
     fn()
-    M._before_each = nil
+    M._before_each = parent_before_each
 end
 
 function M.it(name, fn)
@@ -194,6 +195,11 @@ local test_files = {
     "query/state_isolation_spec.lua",
     "query/safe_bulk_spec.lua",
     "util/log_spec.lua",
+    "query/json_operators_spec.lua",
+    "cache/cache_spec.lua",
+    "encryption/encryption_spec.lua",
+    "audit/audit_spec.lua",
+    "database/database_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")

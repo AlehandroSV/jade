@@ -1,3 +1,14 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Provides autocomplete and type checking for Jade's public API
+--- @see https://github.com/AlehandroSV/jade/issues/65
+
+--- @class Jade.Entity : table
+--- @field _table string Database table name
+--- @field _columns table<string, Jade.Column> Column definitions
+--- @field _relations table<string, Jade.Relation> Relation definitions
+--- @field _driver? Jade.Driver Currently attached driver instance
+--- @field _database? string Optional database override
+
 local Expression = require("jade.query.expression")
 local Query = require("jade.query")
 local Instance = require("jade.entity.instance")
@@ -73,10 +84,16 @@ function Entity.new(table_name, columns, options)
     return model
 end
 
+--- Attach a driver to this entity for database operations
+--- @param driver Jade.Driver Database driver instance
 function Entity:configure(driver)
     self._driver = driver
 end
 
+--- Define a named query scope for reusable filtering
+--- @param name string Scope identifier
+--- @vararg function|any Optional arguments or scope function
+--- @return Jade.Entity | Jade.Query Either the entity itself (definition mode) or a Query (invocation mode)
 function Entity:scope(name, ...)
     local args = { ... }
     if #args > 0 and type(args[1]) == "function" then
@@ -102,6 +119,11 @@ local function entityRelKey(target)
 end
 
 -- Relation definitions
+
+--- Define a belongsTo relationship (foreign key on current entity)
+--- @param target_entity Jade.Entity Target entity to relate to
+--- @param options? table Optional configuration (e.g., foreign_key, owner_key)
+--- @return Jade.Entity self for chaining
 function Entity:belongsTo(target_entity, options)
     options = options or {}
     if not options.foreign_key and self._table == target_entity._table then
@@ -116,6 +138,10 @@ function Entity:belongsTo(target_entity, options)
     return self
 end
 
+--- Define a hasOne relationship (one-to-one)
+--- @param target_entity Jade.Entity Related entity
+--- @param options? table Configuration (foreign_key, owner_key)
+--- @return Jade.Entity self for chaining
 function Entity:hasOne(target_entity, options)
     local relation = Relations.hasOne(self, target_entity, options)
     local tableName, entityName = entityRelKey(target_entity)
@@ -124,6 +150,10 @@ function Entity:hasOne(target_entity, options)
     return self
 end
 
+--- Define a hasMany relationship (one-to-many)
+--- @param target_entity Jade.Entity Related entity
+--- @param options? table Configuration (foreign_key, owner_key)
+--- @return Jade.Entity self for chaining
 function Entity:hasMany(target_entity, options)
     local relation = Relations.hasMany(self, target_entity, options)
     local tableName, entityName = entityRelKey(target_entity)
@@ -132,6 +162,10 @@ function Entity:hasMany(target_entity, options)
     return self
 end
 
+--- Define a ForeignKey reference between entities
+--- @param target_entity Jade.Entity Referenced entity
+--- @param options? table Configuration (table, column, etc.)
+--- @return Jade.Entity self for chaining
 function Entity:foreignKey(target_entity, options)
     local relation = Relations.ForeignKey(target_entity, options)
     local tableName, entityName = entityRelKey(target_entity)
@@ -140,6 +174,10 @@ function Entity:foreignKey(target_entity, options)
     return self
 end
 
+--- Define a hasAndBelongsToMany (many-to-many via pivot table)
+--- @param target_entity Jade.Entity Related entity
+--- @param options? table Pivot table configuration
+--- @return Jade.Entity self for chaining
 function Entity:hasAndBelongsToMany(target_entity, options)
     local relation = Relations.hasAndBelongsToMany(self, target_entity, options)
     local tableName, entityName = entityRelKey(target_entity)
@@ -148,6 +186,11 @@ function Entity:hasAndBelongsToMany(target_entity, options)
     return self
 end
 
+--- Define a hasManyThrough (nested one-to-many)
+--- @param target_entity Jade.Entity Final related entity
+--- @param through_entity Jade.Entity Intermediate "through" entity
+--- @param options? table Additional configuration
+--- @return Jade.Entity self for chaining
 function Entity:hasManyThrough(target_entity, through_entity, options)
     local relation = Relations.hasManyThrough(self, target_entity, through_entity, options)
     local tableName, entityName = entityRelKey(target_entity)
@@ -156,31 +199,53 @@ function Entity:hasManyThrough(target_entity, through_entity, options)
     return self
 end
 
--- Query methods
+--- Query builder shortcuts — delegate to new Query instance
+
+--- Filter by a WHERE condition
+--- @param condition string|Jade.Condition SQL condition or Condition object
+--- @return Jade.Query Configured query with WHERE clause
 function Entity:where(condition)
     return Query.new(self):where(condition)
 end
 
+--- Sort results by column and direction
+--- @param column string Column name or Expression
+--- @param direction? "ASC"|"DESC" Sort direction (default: "ASC")
+--- @return Jade.Query Configured query with ORDER BY clause
 function Entity:orderBy(column, direction)
     return Query.new(self):orderBy(column, direction)
 end
 
+--- Limit number of returned rows
+--- @param n integer Maximum number of rows to return
+--- @return Jade.Query Configured query with LIMIT clause
 function Entity:limit(n)
     return Query.new(self):limit(n)
 end
 
+--- Skip first N rows for pagination
+--- @param n integer Number of rows to skip
+--- @return Jade.Query Configured query with OFFSET clause
 function Entity:offset(n)
     return Query.new(self):offset(n)
 end
 
+--- Specify which columns to select
+--- @vararg string Columns or SQL expressions
+--- @return Jade.Query Configured query with SELECT clause
 function Entity:select(...)
     return Query.new(self):select(...)
 end
 
+--- Eager load relations (N+1 optimization)
+--- @param relation_name string Name of relation to load
+--- @return Jade.Query Configured query with include directive
 function Entity:include(relation_name)
     return Query.new(self):include(relation_name)
 end
 
+--- Return only distinct rows
+--- @return Jade.Query Configured query with DISTINCT
 function Entity:distinct()
     return Query.new(self):distinct()
 end
@@ -189,28 +254,44 @@ function Entity:join(table_name, on_condition)
     return Query.new(self):join(table_name, on_condition)
 end
 
+--- Left outer join with another table
+--- @param table_name string Table to join
+--- @param on_condition string|table Join condition (SQL string or table of conditions)
+--- @return Jade.Query Configured query with LEFT JOIN
 function Entity:leftJoin(table_name, on_condition)
     return Query.new(self):leftJoin(table_name, on_condition)
 end
 
+--- Group results by column(s)
+--- @vararg string Column names
+--- @return Jade.Query Configured query with GROUP BY
 function Entity:groupBy(...)
     return Query.new(self):groupBy(...)
 end
 
+--- Add HAVING clause to grouped queries
+--- @param condition string|Jade.Condition Filter after GROUP BY
+--- @return Jade.Query Configured query with HAVING clause
 function Entity:having(condition)
     return Query.new(self):having(condition)
 end
 
+--- Execute query and return all matching rows as Instance objects
+--- @return table<string, any>[] Array of entity instances
 function Entity:get()
     return Query.new(self):get()
 end
 
+--- Execute query and return only the first matching row
+--- @return nil|table Instance of the first result row
 function Entity:first()
     return Query.new(self):first()
 end
 
--- find(id) - find by primary key (backward compatible)
--- find({ where = {...}, orderBy = {...} }) - find multiple with options
+--- Find record(s) by ID or options table
+--- Single ID returns one instance; table returns array filtered by options
+--- @param id_or_options integer|string|table Primary key value or { where = {...}, limit = ... }
+--- @return nil|table|(table) Single instance if ID given, else array of instances
 function Entity:find(id_or_options)
     if type(id_or_options) == "table" then
         -- Flexible find with options
@@ -240,9 +321,9 @@ function Entity:find(id_or_options)
     end
 end
 
--- Flexible query methods
-
--- findFirst({ where = { col = val } }) - find first matching record
+--- Find first record matching filter options
+--- @param options? table Options ({ where = {...}, orderBy = {...} })
+--- @return nil|table First matching instance or nil
 function Entity:findFirst(options)
     local q = Query.new(self)
     if options and options.where then
@@ -259,7 +340,9 @@ function Entity:findFirst(options)
     return q:first()
 end
 
--- findFirstOrThrow({ where = { col = val } }) - find first or error
+--- Find first record or throw error if not found
+--- @param options? table Filter options
+--- @return table First matching instance (never nil)
 function Entity:findFirstOrThrow(options)
     local result = self:findFirst(options)
     if not result then
@@ -268,7 +351,9 @@ function Entity:findFirstOrThrow(options)
     return result
 end
 
--- findUnique({ where = { email = "..." } }) - find by unique field
+--- Find by unique field constraint
+--- @param options? table Must include { where = { unique_field = value } }
+--- @return nil|table Result or nil
 function Entity:findUnique(options)
     if not options or not options.where then
         error("findUnique requires a where clause")
@@ -276,7 +361,9 @@ function Entity:findUnique(options)
     return self:findFirst(options)
 end
 
--- findUniqueOrThrow({ where = { email = "..." } }) - find unique or error
+--- Find by unique field or throw error
+--- @param options? table Unique field options
+--- @return table Instance found (never nil)
 function Entity:findUniqueOrThrow(options)
     local result = self:findUnique(options)
     if not result then
@@ -285,6 +372,9 @@ function Entity:findUniqueOrThrow(options)
     return result
 end
 
+--- Count matching rows
+--- @param options? table { where = {...} } to filter
+--- @return integer Number of matching rows
 function Entity:count(options)
     local q = Query.new(self)
     if options and options.where then
@@ -296,27 +386,45 @@ function Entity:count(options)
     return q:count()
 end
 
+--- Sum values in a numeric column
+--- @param column string Column name to sum
+--- @return number|nil Summed total or nil
 function Entity:sum(column)
     return Query.new(self):sum(column)
 end
 
+--- Average values in a numeric column
+--- @param column string Column name to average
+--- @return number|nil Average or nil
 function Entity:average(column)
     return Query.new(self):average(column)
 end
 
+--- Minimum value in a column
+--- @param column string Column name
+--- @return any|nil Minimum value or nil
 function Entity:min(column)
     return Query.new(self):min(column)
 end
 
+--- Maximum value in a column
+--- @param column string Column name
+--- @return any|nil Maximum value or nil
 function Entity:max(column)
     return Query.new(self):max(column)
 end
 
+--- Paginated results from entity
+--- @param options? table Pagination options ({ page, per_page, etc. })
+--- @return table Paginated result object
 function Entity:paginate(options)
     local paginate = require("jade.query.paginate")
     return paginate.paginate(Query.new(self), options)
 end
 
+--- Check if any records match criteria
+--- @param options? table { where = {...} } filter
+--- @return boolean true if at least one match exists
 function Entity:exists(options)
     local q = Query.new(self)
     if options and options.where then
