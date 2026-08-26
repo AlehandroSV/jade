@@ -186,12 +186,12 @@ end
 
 -- Check if using custom encryption (Lua-level)
 function M.isCustom()
-    return enc_config.algorithm == "custom" and enc_config.encrypt_fn and enc_config.decrypt_fn
+    return enc_config.algorithm == "custom" and enc_config.encrypt_fn ~= nil and enc_config.decrypt_fn ~= nil
 end
 
 function M.isEntityCustom(entity_name)
     local config = M.getEntityConfig(entity_name)
-    return config.algorithm == "custom" and config.encrypt_fn and config.decrypt_fn
+    return config.algorithm == "custom" and config.encrypt_fn ~= nil and config.decrypt_fn ~= nil
 end
 
 -- Check if using database-native encryption
