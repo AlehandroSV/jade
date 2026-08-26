@@ -1,4 +1,5 @@
 local Quoting = require("jade.util.quoting")
+local Hash = require("jade.util.hash")
 
 local Audit = {}
 
@@ -7,6 +8,9 @@ local audit_config = {}
 
 -- Table name for audit logs
 local AUDIT_TABLE = "jade_audit_logs"
+
+-- Secret key for audit integrity (should be set via environment variable)
+local AUDIT_SECRET_KEY = os.getenv("JADE_AUDIT_SECRET_KEY") or "jade-default-audit-key-change-me"
 
 -- Setup audit for an entity
 function Audit.setup(entity, options)
@@ -110,6 +114,11 @@ function Audit._log(entity, instance, action, changes, raw_data)
         created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
     }
 
+    -- Generate integrity hash for the audit entry
+    if Hash.isCryptoAvailable() then
+        entry._integrity_hash = Hash.hashAuditEntry(entry, AUDIT_SECRET_KEY)
+    end
+
     local cols = {}
     local vals = {}
     local placeholders = {}
@@ -158,7 +167,8 @@ function Audit._ensureTable(driver)
             record_id VARCHAR(255),
             action VARCHAR(50) NOT NULL,
             changes TEXT,
-            created_at %s
+            created_at %s,
+            _integrity_hash VARCHAR(64)
         )]],
         Quoting.quoteIdentifier(AUDIT_TABLE),
         id_type,
@@ -192,6 +202,51 @@ function Audit.query(driver, filters)
     local sql = string.format("SELECT * FROM %s%s ORDER BY created_at DESC", Quoting.quoteIdentifier(AUDIT_TABLE), where)
 
     return driver:execute(sql, bindings)
+end
+
+-- Verify integrity of an audit log entry
+--- @param entry table Audit log entry from database
+--- @param secret_key? string Optional override for the secret key
+--- @return boolean true if integrity is valid (or if hashing not available)
+function Audit.verifyIntegrity(entry, secret_key)
+    if not entry._integrity_hash then
+        -- No hash present, cannot verify (old entries before integrity feature)
+        return true
+    end
+    
+    local key = secret_key or AUDIT_SECRET_KEY
+    return Hash.verifyAuditEntry(entry, key)
+end
+
+-- Verify integrity of all audit logs matching filters
+--- @param driver table Database driver
+--- @param filters? table Optional filters for which logs to verify
+--- @return table Results: {total=number, verified=number, failed=number, failed_entries={}}
+function Audit.verifyAllIntegrity(driver, filters)
+    local entries = Audit.query(driver, filters or {})
+    local results = {
+        total = #entries,
+        verified = 0,
+        failed = 0,
+        failed_entries = {},
+    }
+    
+    for i, entry in ipairs(entries) do
+        if Audit.verifyIntegrity(entry) then
+            results.verified = results.verified + 1
+        else
+            results.failed = results.failed + 1
+            results.failed_entries[#results.failed_entries + 1] = entry
+        end
+    end
+    
+    return results
+end
+
+-- Set a custom audit secret key (call this during application initialization)
+--- @param key string Secret key for HMAC signing
+function Audit.setSecretKey(key)
+    AUDIT_SECRET_KEY = key
 end
 
 -- Clear audit config (for testing)

@@ -44,8 +44,16 @@ Jade.Events = require("jade.entity.events")
 -- Security
 Jade.security = require("jade.security")
 
--- Audit
-Jade.Audit = require("jade.audit")
+-- Audit (lazy load to avoid circular dependency)
+setmetatable(Jade, {
+    __index = function(t, key)
+        if key == "Audit" then
+            local Audit = require("jade.audit")
+            rawset(t, "Audit", Audit)
+            return Audit
+        end
+    end
+})
 
 -- Encryption
 Jade.Encryption = require("jade.encryption")
