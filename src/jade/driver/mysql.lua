@@ -55,7 +55,22 @@ end
 
 -- Cross-platform setenv implementation
 -- Uses FFI in LuaJIT, falls back to os.execute in standard Lua
+local function validateEnvName(name)
+    -- Environment variable names must be alphanumeric and underscores only
+    -- This prevents command injection through malicious environment variable names
+    if type(name) ~= "string" or name == "" then
+        error("Invalid environment variable name: rejected by security policy")
+    end
+    if not name:match("^[A-Z_][A-Z0-9_]*$") then
+        error("Invalid environment variable name: rejected by security policy")
+    end
+    return true
+end
+
 local function setenv(name, value)
+    -- Validate environment variable name to prevent command injection
+    validateEnvName(name)
+    
     local ok, ffi = pcall(require, "ffi")
     if ok and ffi then
         -- LuaJIT FFI path
@@ -71,8 +86,11 @@ local function setenv(name, value)
     else
         -- Standard Lua: use os.execute (affects subprocess only, but
         -- MySQL C API may read /proc/self/environ on Linux)
+        -- Sanitize value to prevent shell injection
         if value and value ~= "" then
-            os.execute(string.format("export %s='%s'", name, value:gsub("'", "'\\''")))
+            -- Escape single quotes by replacing ' with '\''
+            local safe_value = tostring(value):gsub("'", "'\\''")
+            os.execute(string.format("export %s='%s'", name, safe_value))
         else
             os.execute(string.format("unset %s", name))
         end
