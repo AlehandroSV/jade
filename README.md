@@ -1333,3 +1333,53 @@ Para documentacao completa, veja o [README do jade-linter](https://github.com/Al
 ### Licenca
 
 MIT
+
+---
+
+## Docker (Produção)
+
+O Jade inclui um Dockerfile otimizado com multi-stage build seguindo as melhores práticas de segurança.
+
+### Build da Imagem
+
+```bash
+docker build -t jade:latest .
+```
+
+### Executar Container
+
+```bash
+docker run --rm jade:latest
+```
+
+### Docker Compose (Produção)
+
+```bash
+# Producao
+docker-compose up -d
+
+# Com CLI para desenvolvimento/migrations
+docker-compose --profile dev up -d
+```
+
+### Características do Dockerfile
+
+- **Multi-stage build** - Separa build e runtime para imagem mínima (~50MB)
+- **Sem ferramentas de build em produção** - Apenas runtime dependencies
+- **Usuário não-root** - Container roda como usuário `jade` por segurança
+- **HEALTHCHECK** - Monitoramento automático de saúde do container
+- **.dockerignore** - Exclui arquivos desnecessários (testes, docs, IDE)
+- **Resource limits** - Limites de CPU/memória configurados no docker-compose
+
+### Estágios Disponíveis
+
+1. **builder** - Instala dependências Lua/LuaRocks
+2. **cli** (opcional) - Instala CLI tools Node.js (apenas para dev)
+3. **runtime** (default) - Imagem mínima de produção
+
+### Segurança
+
+- Sem compilers, headers ou package managers na imagem final
+- Sem Node.js/npm em produção (disponível apenas no stage `cli`)
+- Volumes montados como read-only quando possível
+- Limites de recursos configuráveis
