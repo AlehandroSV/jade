@@ -367,10 +367,10 @@ function Jade.syncSchema(filepath)
 end
 
 --- Load generated model files from a directory
----@param dir? string Directory path (default: "jade/models")
+---@param dir? string Directory path (default: "jade/generated")
 ---@return table<string, Jade.Entity> models Map of model name to entity
 function Jade.loadModels(dir)
-    dir = dir or "jade/models"
+    dir = dir or "jade/generated"
     local models = {}
     local driver = context.get("driver")
 
