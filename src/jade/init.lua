@@ -89,6 +89,9 @@ Jade.Relations = require("jade.entity.relations")
 -- Migration
 Jade.migration = require("jade.migration")
 
+-- Seed
+Jade.Seed = require("jade.seed")
+
 -- Transaction
 Jade.transaction = require("jade.transaction.manager")
 
