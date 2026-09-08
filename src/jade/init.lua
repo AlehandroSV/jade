@@ -427,6 +427,50 @@ function Jade.loadModels(dir)
     })
 end
 
+--- Initialize Jade with a single call: configure + sync schema + load models
+---@param schema_path? string Path to .jade schema file (default: "schema/models.jade")
+---@param opts? table Override options: { database = {...}, sync = true/false }
+---@return table<string, Jade.Entity> models Lazy-loaded model proxy
+function Jade.init(schema_path, opts)
+    schema_path = schema_path or "schema/models.jade"
+    opts = opts or {}
+
+    -- 1. Load config
+    local config_path = opts.config_path or "jade.config.lua"
+    local config_ok, config = pcall(dofile, config_path)
+    if not config_ok then
+        error("Failed to load config from " .. config_path .. ": " .. tostring(config))
+    end
+
+    -- Apply overrides
+    if opts.database then
+        config.database = opts.database
+    end
+
+    -- 2. Configure Jade
+    Jade.configure(config)
+
+    -- 3. Sync schema (create tables) unless explicitly skipped
+    local should_sync = opts.sync
+    if should_sync == nil then
+        -- Auto-detect: sync if schema file exists
+        local f = io.open(schema_path, "r")
+        if f then
+            f:close()
+            should_sync = true
+        else
+            should_sync = false
+        end
+    end
+
+    if should_sync then
+        Jade.syncSchema(schema_path)
+    end
+
+    -- 4. Load and return models
+    return Jade.loadModels(opts.models_dir or "jade/generated")
+end
+
 -- Shorthand Entity constructor that auto-configures the driver
 local original_entity = Jade.Entity
 Jade.Entity = function(table_name, columns)
