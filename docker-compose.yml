@@ -1,0 +1,50 @@
+# Production Docker Compose configuration
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jade:latest
+    container_name: jade-app
+    user: "1000:1000"  # Run as non-root user
+    environment:
+      - JADE_ENV=production
+    volumes:
+      - ./app:/app:ro  # Read-only mount for application code
+    networks:
+      - jade-network
+    healthcheck:
+      test: ["CMD", "lua5.4", "-e", "print('ok')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    # Resource limits for security
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Optional: CLI service for development/migrations (not in production)
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: cli  # Use CLI stage only when needed
+    profiles:
+      - dev  # Only start with --profile dev
+    volumes:
+      - ./app:/app
+    networks:
+      - jade-network
+
+networks:
+  jade-network:
+    driver: bridge

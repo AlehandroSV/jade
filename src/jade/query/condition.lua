@@ -1,8 +1,25 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief WHERE condition objects for query building
+
 local Quoting = require("jade.util.quoting")
 
+--- @class Jade.Condition : table
+--- @field column string Column name
+--- @field op string Comparison operator
+--- @field value any Comparison value
+--- @field table_name? string Table name for qualified references
+--- @field type string Condition type: "simple", "and", "or"
+--- @field left? Jade.Condition Left operand for composite conditions
+--- @field right? Jade.Condition Right operand for composite conditions
 local Condition = {}
 Condition.__index = Condition
 
+--- Create a new simple condition
+--- @param column string Column name
+--- @param op string Comparison operator: =, !=, <, <=, >, >=, LIKE, IS, IS NOT, IN, NOT IN, BETWEEN
+--- @param value any Comparison value
+--- @param table_name? string Table name for qualified column reference
+--- @return Jade.Condition New condition
 function Condition.new(column, op, value, table_name)
     local self = {
         column = column,
@@ -15,6 +32,9 @@ function Condition.new(column, op, value, table_name)
     return self
 end
 
+--- Combine with another condition using AND
+--- @param other Jade.Condition Right-hand condition
+--- @return Jade.Condition Composite AND condition
 function Condition:band(other)
     local composite = {
         left = self,
@@ -25,6 +45,9 @@ function Condition:band(other)
     return composite
 end
 
+--- Combine with another condition using OR
+--- @param other Jade.Condition Right-hand condition
+--- @return Jade.Condition Composite OR condition
 function Condition:bor(other)
     local composite = {
         left = self,
@@ -35,6 +58,10 @@ function Condition:bor(other)
     return composite
 end
 
+--- Compile condition to SQL string with bindings
+--- @param bindings? any[] Output bindings array
+--- @return string SQL fragment
+--- @return any[] Updated bindings
 function Condition:compile(bindings)
     bindings = bindings or {}
 

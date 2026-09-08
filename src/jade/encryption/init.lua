@@ -1,4 +1,28 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Encryption module for field-level encryption
+
+--- @class Jade.EncryptionModule
+--- @field configure fun(opts: Jade.EncryptionConfig)
+--- @field setEntityConfig fun(entity_name: string, opts: Jade.EncryptionConfig)
+--- @field isEnabled fun(): boolean
+--- @field isCustom fun(): boolean
+--- @field encrypt fun(value: string): string
+--- @field decrypt fun(encrypted: string): string
+--- @field markColumn fun(entity_name: string, column_name: string)
+--- @field isColumnEncrypted fun(entity_name: string, column_name: string): boolean
+--- @field prepareInsert fun(data: table, entity_name: string, columns: table, driver: Jade.Driver): table, table
+--- @field prepareUpdate fun(data: table, entity_name: string, columns: table, driver: Jade.Driver): table, table
+--- @field decryptFields fun(entity_name: string, row: table, columns: table): table
+--- @field validatePath fun(path: string, allowedExtension?: string): boolean
 local M = {}
+
+--- @class Jade.EncryptionConfig
+--- @field key? string Encryption key
+--- @field algorithm? string Encryption algorithm: "aes" or "custom"
+--- @field database_encrypted? boolean Whether database uses native encryption
+--- @field fields? table<string, boolean> Fields to encrypt
+--- @field encrypt_fn? fun(value: string, key: string): string Custom encrypt function
+--- @field decrypt_fn? fun(encrypted: string, key: string): string Custom decrypt function
 
 -- Encryption configuration (global — legacy / fallback)
 local enc_config = {
