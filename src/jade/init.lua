@@ -387,8 +387,25 @@ function Jade.loadModels(dir)
         handle:close()
     end
 
+    local proxy = {}
+
+    -- Reload a single model (or all if no name given)
+    ---@param name? string Model name to reload (nil = reload all)
+    function proxy:reload(name)
+        if name then
+            cache[name] = nil
+        else
+            for k in pairs(cache) do cache[k] = nil end
+        end
+    end
+
+    -- Clear all cached models
+    function proxy:clearCache()
+        for k in pairs(cache) do cache[k] = nil end
+    end
+
     -- Return proxy that loads on access
-    return setmetatable({}, {
+    return setmetatable(proxy, {
         __index = function(_, key)
             if not available[key] then return nil end
             if cache[key] then return cache[key] end
