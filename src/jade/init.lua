@@ -366,44 +366,48 @@ function Jade.syncSchema(filepath)
     end
 end
 
---- Load generated model files from a directory
+--- Load generated model files lazily from a directory
+--- Models are loaded on first access, not upfront
 ---@param dir? string Directory path (default: "jade/generated")
----@return table<string, Jade.Entity> models Map of model name to entity
+---@return table<string, Jade.Entity> models Proxy table that loads models on demand
 function Jade.loadModels(dir)
     dir = dir or "jade/generated"
-    local models = {}
-    local driver = context.get("driver")
+    local cache = {}
 
-    -- Try to load directory listing
-    local ok, iter = pcall(function()
-        -- Lua 5.2+ uses io.popen for directory listing
-        local handle = io.popen('ls "' .. dir .. '" 2>/dev/null || dir /b "' .. dir .. '" 2>nul')
-        if not handle then return nil end
-        local result = handle:read("*a")
+    -- Scan directory once to get available model names
+    local available = {}
+    local handle = io.popen('ls "' .. dir .. '" 2>/dev/null || dir /b "' .. dir .. '" 2>nul')
+    if handle then
+        for filename in handle:lines() do
+            if filename:match("%.lua$") then
+                local name = filename:gsub("%.lua$", "")
+                available[name] = dir .. "/" .. filename
+            end
+        end
         handle:close()
-        return result
-    end)
-
-    if not ok or not iter then
-        -- Fallback: try common model names from .jade
-        return models
     end
 
-    for filename in iter:gmatch("[^\r\n]+") do
-        if filename:match("%.lua$") then
-            local model_name = filename:gsub("%.lua$", "")
-            local filepath = dir .. "/" .. filename
-            local model_ok, model = pcall(dofile, filepath)
-            if model_ok and type(model) == "table" and model._table then
+    -- Return proxy that loads on access
+    return setmetatable({}, {
+        __index = function(_, key)
+            if not available[key] then return nil end
+            if cache[key] then return cache[key] end
+
+            local driver = context.get("driver")
+            local ok, model = pcall(dofile, available[key])
+            if ok and type(model) == "table" and model._table then
                 if driver then
                     model:configure(driver)
                 end
-                models[model_name] = model
+                cache[key] = model
+                return model
             end
-        end
-    end
-
-    return models
+            return nil
+        end,
+        __pairs = function()
+            return pairs(available)
+        end,
+    })
 end
 
 -- Shorthand Entity constructor that auto-configures the driver
