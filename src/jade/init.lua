@@ -1,3 +1,60 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Provides autocomplete and type checking for Jade's public API
+--- @see https://github.com/AlehandroSV/jade/issues/65
+---
+--- @class Jade
+--- @field _VERSION string Jade version string
+--- @field String fun(length?: number): Jade.Column
+--- @field Integer fun(): Jade.Column
+--- @field BigInt fun(): Jade.Column
+--- @field Float fun(): Jade.Column
+--- @field Decimal fun(): Jade.Column
+--- @field Boolean fun(): Jade.Column
+--- @field Text fun(): Jade.Column
+--- @field Timestamp fun(): Jade.Column
+--- @field Date fun(): Jade.Column
+--- @field UUID fun(): Jade.Column
+--- @field CUID fun(): Jade.Column
+--- @field NanoID fun(): Jade.Column
+--- @field JSON fun(): Jade.Column
+--- @field Enum fun(...: string): Jade.Column
+--- @field Entity fun(table_name: string, columns: table<string, Jade.Column>): Jade.Entity
+--- @field Relations Jade.RelationsModule
+--- @field migration Jade.MigrationModule
+--- @field transaction Jade.TransactionModule
+--- @field SoftDelete Jade.SoftDeleteModule
+--- @field Events Jade.EventsModule
+--- @field security Jade.SecurityModule
+--- @field Encryption Jade.EncryptionModule
+--- @field Schema Jade.SchemaModule
+--- @field Declarative Jade.DeclarativeModule
+--- @field drivers Jade.DriversModule
+--- @field cache Jade.CacheModule
+--- @field database Jade.DatabaseModule
+--- @field config Jade.ConfigModule
+--- @field log Jade.LogModule
+--- @field plugin Jade.PluginModule
+--- @field pluginLoader Jade.PluginLoaderModule
+--- @field inflection Jade.InflectionModule
+--- @field configure fun(opts: Jade.Config): Jade.Driver
+--- @field configureFromEnvironment fun(basePath: string): Jade.Driver
+--- @field driver fun(): Jade.Driver
+--- @field disconnect fun()
+--- @field raw fun(sql: string, ...: any): table
+--- @field on fun(event: string, handler: function)
+--- @field use fun(plugin: table, options?: table): boolean, string?
+--- @field unloadPlugin fun(name: string): boolean, string?
+--- @field createTable fun(name: string, fn: function)
+--- @field dropTable fun(name: string)
+--- @field renameTable fun(old_name: string, new_name: string)
+--- @field addColumn fun(table_name: string, column_name: string, type_name: string, options?: table)
+--- @field dropColumn fun(table_name: string, column_name: string)
+--- @field renameColumn fun(table_name: string, old_name: string, new_name: string)
+--- @field addIndex fun(table_name: string, columns: string[], options?: table)
+--- @field dropIndex fun(table_name: string, index_name: string)
+--- @field addForeignKey fun(table_name: string, options: table)
+--- @field dropForeignKey fun(table_name: string, constraint_name: string)
+
 require("jade.util.compat")
 
 local Jade = {
@@ -150,12 +207,17 @@ function Jade.configure(opts)
     return driver
 end
 
--- Configure from environment-specific config files
+--- Configure from environment-specific config files
+---@param basePath string Base path for config files
+---@return Jade.Driver Configured driver
 function Jade.configureFromEnvironment(basePath)
     local env_config = Jade.config.loadForEnvironment(basePath)
     return Jade.configure(env_config)
 end
 
+--- Get the current database driver
+---@return Jade.Driver Current driver instance
+---@error If Jade is not configured
 function Jade.driver()
     local driver = context.get("driver")
     if not driver then
@@ -164,6 +226,7 @@ function Jade.driver()
     return driver
 end
 
+--- Disconnect the current database driver
 function Jade.disconnect()
     local driver = context.get("driver")
     if driver then
@@ -172,52 +235,90 @@ function Jade.disconnect()
     end
 end
 
+--- Create a raw SQL expression
+---@param sql string Raw SQL string
+---@vararg any Bindings for the SQL
+---@return table Raw SQL expression
 function Jade.raw(sql, ...)
     return { _raw = sql, _bindings = { ... } }
 end
 
--- Event convenience
+--- Register an event handler
+---@param event_name string Event name
+---@param handler function Event handler function
 function Jade.on(event_name, handler)
     return Jade.Events.on(event_name, handler)
 end
 
--- DDL shortcuts (delegate to Schema module with current driver)
+--- Create a new table (DDL)
+---@param name string Table name
+---@param fn function Table definition function
 function Jade.createTable(name, fn)
     return Jade.Schema.createTable(Jade.driver(), name, fn)
 end
 
+--- Drop a table (DDL)
+---@param name string Table name
 function Jade.dropTable(name)
     return Jade.Schema.dropTable(Jade.driver(), name)
 end
 
+--- Rename a table (DDL)
+---@param old_name string Current table name
+---@param new_name string New table name
 function Jade.renameTable(old_name, new_name)
     return Jade.Schema.renameTable(Jade.driver(), old_name, new_name)
 end
 
+--- Add a column to a table (DDL)
+---@param table_name string Table name
+---@param column_name string Column name
+---@param type_name string Column type
+---@param options? table Column options
 function Jade.addColumn(table_name, column_name, type_name, options)
     return Jade.Schema.addColumn(Jade.driver(), table_name, column_name, type_name, options)
 end
 
+--- Drop a column from a table (DDL)
+---@param table_name string Table name
+---@param column_name string Column name
 function Jade.dropColumn(table_name, column_name)
     return Jade.Schema.dropColumn(Jade.driver(), table_name, column_name)
 end
 
+--- Rename a column (DDL)
+---@param table_name string Table name
+---@param old_name string Current column name
+---@param new_name string New column name
 function Jade.renameColumn(table_name, old_name, new_name)
     return Jade.Schema.renameColumn(Jade.driver(), table_name, old_name, new_name)
 end
 
+--- Add an index to a table (DDL)
+---@param table_name string Table name
+---@param columns string[] Column names to index
+---@param options? table Index options
 function Jade.addIndex(table_name, columns, options)
     return Jade.Schema.addIndex(Jade.driver(), table_name, columns, options)
 end
 
+--- Drop an index (DDL)
+---@param table_name string Table name
+---@param index_name string Index name
 function Jade.dropIndex(table_name, index_name)
     return Jade.Schema.dropIndex(Jade.driver(), table_name, index_name)
 end
 
+--- Add a foreign key constraint (DDL)
+---@param table_name string Table name
+---@param options table Foreign key options
 function Jade.addForeignKey(table_name, options)
     return Jade.Schema.addForeignKey(Jade.driver(), table_name, options)
 end
 
+--- Drop a foreign key constraint (DDL)
+---@param table_name string Table name
+---@param constraint_name string Constraint name
 function Jade.dropForeignKey(table_name, constraint_name)
     return Jade.Schema.dropForeignKey(Jade.driver(), table_name, constraint_name)
 end

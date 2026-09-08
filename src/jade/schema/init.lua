@@ -1,8 +1,26 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Schema module for DDL operations
+
 local Quoting = require("jade.util.quoting")
 
+--- @class Jade.SchemaModule
+--- @field createTable fun(driver: Jade.Driver, name: string, fn: function): boolean
+--- @field dropTable fun(driver: Jade.Driver, name: string): boolean
+--- @field renameTable fun(driver: Jade.Driver, old_name: string, new_name: string): boolean
+--- @field addColumn fun(driver: Jade.Driver, table_name: string, column_name: string, type_name: string, options?: table): boolean
+--- @field dropColumn fun(driver: Jade.Driver, table_name: string, column_name: string): boolean
+--- @field renameColumn fun(driver: Jade.Driver, table_name: string, old_name: string, new_name: string): boolean
+--- @field addIndex fun(driver: Jade.Driver, table_name: string, columns: string[], options?: table): boolean
+--- @field dropIndex fun(driver: Jade.Driver, table_name: string, index_name: string): boolean
+--- @field addForeignKey fun(driver: Jade.Driver, table_name: string, options: table): boolean
+--- @field dropForeignKey fun(driver: Jade.Driver, table_name: string, constraint_name: string): boolean
 local Schema = {}
 
--- DDL operations that execute SQL directly
+--- Create a new table
+--- @param driver Jade.Driver Database driver
+--- @param name string Table name
+--- @param fn function Table definition function (receives Table builder)
+--- @return boolean true on success
 function Schema.createTable(driver, name, fn)
     local Table = require("jade.schema.table")
     local tbl = Table.new(name)
@@ -21,6 +39,10 @@ function Schema.createTable(driver, name, fn)
     return true
 end
 
+--- Drop a table
+--- @param driver Jade.Driver Database driver
+--- @param name string Table name
+--- @return boolean true on success
 function Schema.dropTable(driver, name)
     local sql = "DROP TABLE IF EXISTS " .. Quoting.quoteIdentifier(name)
     if driver:dropTableCascade() then
@@ -30,12 +52,24 @@ function Schema.dropTable(driver, name)
     return true
 end
 
+--- Rename a table
+--- @param driver Jade.Driver Database driver
+--- @param old_name string Current table name
+--- @param new_name string New table name
+--- @return boolean true on success
 function Schema.renameTable(driver, old_name, new_name)
     local sql = "ALTER TABLE " .. Quoting.quoteIdentifier(old_name) .. " RENAME TO " .. Quoting.quoteIdentifier(new_name)
     driver:execute(sql)
     return true
 end
 
+--- Add a column to an existing table
+--- @param driver Jade.Driver Database driver
+--- @param table_name string Table name
+--- @param column_name string Column name
+--- @param type_name string Column type
+--- @param options? table Column options: {length?, null?, default?}
+--- @return boolean true on success
 function Schema.addColumn(driver, table_name, column_name, type_name, options)
     options = options or {}
     local sql = "ALTER TABLE " .. Quoting.quoteIdentifier(table_name) .. " ADD COLUMN " .. Quoting.quoteIdentifier(column_name) .. " " .. type_name

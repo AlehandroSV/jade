@@ -1,3 +1,10 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Driver registry for database backends
+
+--- @class Jade.DriversModule
+--- @field register fun(name: string, module: Jade.Driver)
+--- @field get fun(name: string): Jade.Driver
+
 local drivers = {}
 local driver_modules = {}
 

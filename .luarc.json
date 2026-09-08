@@ -1,24 +1,31 @@
 {
+    "$schema": "https://raw.githubusercontent.com/LuaLS/lua-language-server/master/doc/en-us/config.md",
     "runtime": {
-        "version": "LuaJIT"
+        "version": "Lua 5.1",
+        "special": {
+            "require": "require"
+        }
     },
     "diagnostics": {
-        "globals": ["vim", "jit", "unpack", "table"]
+        "globals": ["Jade"],
+        "disable": ["lowercase-global"]
     },
     "workspace": {
         "library": [
-            "src/jade",
-            "${workspaceFolder}/src"
+            "src/jade/types"
         ],
-        "ignoreDir": ["/%.git"],
-        "checkThirdParty": "Disabled"
+        "checkThirdParty": false
     },
-    "unusedLocalExclude": ["_*"],
-    "format": {
+    "completion": {
+        "callSnippet": "Replace",
+        "keywordSnippet": "Replace",
+        "displayContext": 6
+    },
+    "hover": {
         "enable": true,
-        "defaultConfig": {
-            "indent_style": "spaces",
-            "indent_size": 4
-        }
+        "fieldsLimit": 20
+    },
+    "format": {
+        "enable": true
     }
 }

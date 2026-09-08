@@ -1,8 +1,17 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Migration management module
+
 local tracker = require("jade.migration.tracker")
 local runner = require("jade.migration.runner")
 local diff = require("jade.migration.diff")
 local generator = require("jade.migration.generator")
 
+--- @class Jade.MigrationModule
+--- @field tracker Jade.MigrationTracker Migration tracking module
+--- @field runner Jade.MigrationRunner Migration execution module
+--- @field file Jade.MigrationFile Migration file utilities
+--- @field diff Jade.MigrationDiff Schema diff module
+--- @field generator Jade.MigrationGenerator Migration generator module
 local M = {
     tracker = tracker,
     runner = runner,
@@ -11,6 +20,8 @@ local M = {
     generator = generator,
 }
 
+--- Initialize migration tracking table
+--- @param driver Jade.Driver Database driver
 function M.init(driver)
     tracker.createTrackerTable(driver)
 end

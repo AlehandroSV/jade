@@ -1,4 +1,33 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Configuration management module
+
+--- @class Jade.ConfigModule
+--- @field load fun(path?: string): Jade.Config
+--- @field set fun(cfg: Jade.Config)
+--- @field get fun(): Jade.Config?
+--- @field loadForEnvironment fun(basePath: string): Jade.Config
+--- @field parseURL fun(url: string): Jade.Config
+--- @field validatePath fun(path: string, allowedExtension?: string): boolean
 local M = {}
+
+--- @class Jade.Config
+--- @field database Jade.DatabaseConfig Database configuration
+--- @field pool? Jade.PoolConfig Connection pool settings
+--- @field logging? Jade.LoggingConfig Logging configuration
+--- @field encryption? Jade.EncryptionConfig Encryption settings
+--- @field plugins? Jade.PluginConfig[] Plugin configurations
+--- @field locale? string Locale for i18n
+--- @field url? string Database URL (alternative to database object)
+--- @field env_vars? string[] Environment variable fallbacks
+
+--- @class Jade.PoolConfig
+--- @field max_size? number Maximum pool size (default: 10)
+--- @field min_size? number Minimum pool size (default: 2)
+--- @field idle_timeout? number Idle timeout in seconds (default: 300)
+
+--- @class Jade.LoggingConfig
+--- @field level? string Log level: "debug", "info", "warn", "error"
+--- @field sql? boolean Log SQL queries
 
 local config = nil
 
@@ -13,8 +42,10 @@ local DEFAULT_ENV_FALLBACKS = {
     "RACK_ENV",      -- Ruby (genérico)
 }
 
--- Validate and sanitize file path to prevent directory traversal
--- Exported as M.validatePath for testability
+--- Validate and sanitize file path to prevent directory traversal
+--- @param path string File path to validate
+--- @param allowedExtension? string Required file extension
+--- @return boolean true if valid
 function M.validatePath(path, allowedExtension)
     if type(path) ~= "string" or path == "" then
         error("Invalid path: rejected by security policy")
