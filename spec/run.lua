@@ -153,6 +153,7 @@ local test_files = {
     "types/types_spec.lua",
     "types/luals_spec.lua",
     "schema/declarative_spec.lua",
+    "schema/declarative_jade_spec.lua",
     "query/expression_spec.lua",
     "query/condition_spec.lua",
     "query/eager_loading_spec.lua",
