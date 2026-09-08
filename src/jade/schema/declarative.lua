@@ -59,20 +59,29 @@ Declarative.typeMap = {
 
 -- Parse a simple type string into a column definition
 function Declarative.parseType(type_str)
+    -- Normalize to lowercase for case-insensitive matching
+    local lower = type_str:lower()
+
     -- Check if it's a simple type name
-    if Declarative.typeMap[type_str] then
-        return Declarative.typeMap[type_str]
+    if Declarative.typeMap[lower] then
+        return Declarative.typeMap[lower]
     end
 
-    -- Check if it's a type with length: string(120)
-    local type_name, length = type_str:match("^(%w+)%((%d+)%)$")
+    -- Check if it's a type with empty parentheses: Text(), String()
+    local type_name_empty = lower:match("^(%w+)%(%s*%)$")
+    if type_name_empty and Declarative.typeMap[type_name_empty] then
+        return Declarative.typeMap[type_name_empty]
+    end
+
+    -- Check if it's a type with length: string(120), String(120)
+    local type_name, length = lower:match("^(%w+)%((%d+)%)$")
     if type_name and Declarative.typeMap[type_name] then
         local col = Declarative.typeMap[type_name]
         return { type = col.type, length = tonumber(length) }
     end
 
-    -- Check if it's a decimal with precision: decimal(10,2)
-    local dec_type, precision, scale = type_str:match("^(decimal)%((%d+),(%d+)%)$")
+    -- Check if it's a decimal with precision: decimal(10,2), Decimal(10,2)
+    local dec_type, precision, scale = lower:match("^(decimal)%((%d+),(%d+)%)$")
     if dec_type then
         return { type = "decimal", precision = tonumber(precision), scale = tonumber(scale) }
     end
@@ -233,6 +242,9 @@ function Declarative.generateEntity(model)
 
         if field.primary_key then
             col:primaryKey()
+            if field.auto_increment ~= false then
+                col:autoIncrement()
+            end
         end
         if field.unique then
             col:unique()
@@ -257,7 +269,7 @@ function Declarative.generateEntity(model)
     local entity = Entity.new(model.tableName, columns)
 
     -- Add validations
-    for field_name, validations in pairs(model.validations) do
+    for field_name, validations in pairs(model.validations or {}) do
         if columns[field_name] then
             for validation_type, options in pairs(validations) do
                 if validation_type == "presence" and options == true then
@@ -798,14 +810,10 @@ function Declarative.parsedeclarativeSchema(schema_str)
                 local option_key, option_val = trimmed:match("^(%w+)%s*=%s*(.+)$")
                 if option_key == "table" then
                     current_model.tableName = option_val:match('^"(.*)"$') or option_val
-                elseif option_key == "timestamps" then
+                elseif option_key == "timestamps" and (option_val == "true" or option_val == "false") then
                     current_model.options.timestamps = option_val == "true"
-                elseif option_key == "id" then
-                    if option_val == "false" then
-                        current_model.options.noId = true
-                    else
-                        current_model.options.idType = option_val
-                    end
+                elseif option_key == "id" and option_val == "false" then
+                    current_model.options.noId = true
                 else
                     -- Field definition
                     local field_name, field_def = trimmed:match("^(%w+)%s*=%s*(.+)$")
@@ -824,17 +832,20 @@ function Declarative.parsedeclarativeSchema(schema_str)
 
     -- Add convention fields
     for _, model in pairs(models) do
-        if not model.options.noId then
+        -- Only add id if user didn't define one
+        if not model.options.noId and not model.fields.id then
             model.fields.id = Declarative.conventions.primaryKey()
         end
         if model.options.timestamps ~= false then
             for k, v in pairs(Declarative.conventions.timestamps()) do
-                model.fields[k] = v
+                if not model.fields[k] then
+                    model.fields[k] = v
+                end
             end
         end
     end
 
-    return models
+    return { models = models, options = {} }
 end
 
 -- Parse a single declarative field definition
@@ -844,10 +855,10 @@ function Declarative._parsedeclarativeField(name, def)
     -- Check for modifiers
     local required = def:match("!") ~= nil
     local optional = def:match("%?") ~= nil
-    local default_match = def:match("!default%((.+)%)$")
+    local default_match = def:match("!default%((.+)%)$") or def:match("%.default%((.+)%)$")
 
     -- Remove modifiers for type parsing
-    local type_str = def:gsub("!", ""):gsub("%?", ""):gsub("!default%(.+%)$", ""):match("^%s*(.-)%s*$")
+    local type_str = def:gsub("!", ""):gsub("%?", ""):gsub("%.default%(.+%)$", ""):gsub("!default%(.+%)$", ""):match("^%s*(.-)%s*$")
 
     -- Check for default value
     local default_val = nil
@@ -856,10 +867,25 @@ function Declarative._parsedeclarativeField(name, def)
     end
 
     -- Check for relation: hasMany(Model), belongsTo(Model)
-    local rel_type, rel_model = type_str:match("^(hasMany|hasOne|belongsTo)%((%w+)%)")
+    local rel_type, rel_model
+    rel_model = type_str:match("^hasMany%((%w+)%)")
+    if rel_model then
+        rel_type = "hasMany"
+    else
+        rel_model = type_str:match("^hasOne%((%w+)%)")
+        if rel_model then
+            rel_type = "hasOne"
+        else
+            rel_model = type_str:match("^belongsTo%((%w+)%)")
+            if rel_model then
+                rel_type = "belongsTo"
+            end
+        end
+    end
     if rel_type then
         result.relation = {
             type = rel_type,
+            model = rel_model,
             target = rel_model,
             foreign_key = Declarative.conventions.foreignKey(rel_model),
         }
@@ -881,9 +907,20 @@ function Declarative._parsedeclarativeField(name, def)
     end
 
     -- Apply constraints
-    if required then result.notNull = true end
+    if required then result.not_null = true end
     if optional then result.nullable = true end
-    if default_val then result.default = default_val end
+    if default_val then
+        -- Parse as proper type when possible
+        if default_val == "true" then
+            result.default = true
+        elseif default_val == "false" then
+            result.default = false
+        elseif tonumber(default_val) then
+            result.default = tonumber(default_val)
+        else
+            result.default = default_val
+        end
+    end
 
     return result
 end
