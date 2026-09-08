@@ -366,6 +366,46 @@ function Jade.syncSchema(filepath)
     end
 end
 
+--- Load generated model files from a directory
+---@param dir? string Directory path (default: "jade/models")
+---@return table<string, Jade.Entity> models Map of model name to entity
+function Jade.loadModels(dir)
+    dir = dir or "jade/models"
+    local models = {}
+    local driver = context.get("driver")
+
+    -- Try to load directory listing
+    local ok, iter = pcall(function()
+        -- Lua 5.2+ uses io.popen for directory listing
+        local handle = io.popen('ls "' .. dir .. '" 2>/dev/null || dir /b "' .. dir .. '" 2>nul')
+        if not handle then return nil end
+        local result = handle:read("*a")
+        handle:close()
+        return result
+    end)
+
+    if not ok or not iter then
+        -- Fallback: try common model names from .jade
+        return models
+    end
+
+    for filename in iter:gmatch("[^\r\n]+") do
+        if filename:match("%.lua$") then
+            local model_name = filename:gsub("%.lua$", "")
+            local filepath = dir .. "/" .. filename
+            local model_ok, model = pcall(dofile, filepath)
+            if model_ok and type(model) == "table" and model._table then
+                if driver then
+                    model:configure(driver)
+                end
+                models[model_name] = model
+            end
+        end
+    end
+
+    return models
+end
+
 -- Shorthand Entity constructor that auto-configures the driver
 local original_entity = Jade.Entity
 Jade.Entity = function(table_name, columns)
