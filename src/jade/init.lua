@@ -323,6 +323,49 @@ function Jade.dropForeignKey(table_name, constraint_name)
     return Jade.Schema.dropForeignKey(Jade.driver(), table_name, constraint_name)
 end
 
+---------------------------------------------------------------------------
+-- Declarative Schema (.jade file support)
+---------------------------------------------------------------------------
+
+--- Load a .jade schema file and return parsed schema
+---@param filepath string Path to .jade file
+---@return table schema Parsed schema with models and options
+function Jade.loadSchema(filepath)
+    local f = io.open(filepath, "r")
+    if not f then
+        error("Schema file not found: " .. filepath)
+    end
+    local content = f:read("*a")
+    f:close()
+    return Jade.Declarative.parsedeclarativeSchema(content)
+end
+
+--- Load a .jade file and generate entities
+---@param filepath string Path to .jade file
+---@return table<string, Jade.Entity> entities Map of entity name to entity
+function Jade.loadEntities(filepath)
+    local schema = Jade.loadSchema(filepath)
+    local entities = {}
+    for name, model in pairs(schema.models) do
+        entities[name] = Jade.Declarative.generateEntity(model)
+        local driver = context.get("driver")
+        if driver then
+            entities[name]:configure(driver)
+        end
+    end
+    return entities
+end
+
+--- Load a .jade file and sync tables to database
+---@param filepath string Path to .jade file
+function Jade.syncSchema(filepath)
+    local schema = Jade.loadSchema(filepath)
+    local driver = Jade.driver()
+    for _, model in pairs(schema.models) do
+        Jade.Declarative.createTableFromModel(driver, model)
+    end
+end
+
 -- Shorthand Entity constructor that auto-configures the driver
 local original_entity = Jade.Entity
 Jade.Entity = function(table_name, columns)
