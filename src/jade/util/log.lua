@@ -1,3 +1,25 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Logging module with configurable levels and outputs
+
+--- @class Jade.LogModule
+--- @field configure fun(opts: Jade.LogOptions)
+--- @field debug fun(message: string, ...: any)
+--- @field info fun(message: string, ...: any)
+--- @field warn fun(message: string, ...: any)
+--- @field error fun(message: string, ...: any)
+--- @field sql fun(sql: string, bindings?: any[], duration_ms?: number)
+--- @field setLevel fun(level: string)
+--- @field setEnabled fun(enabled: boolean)
+--- @field isLevelEnabled fun(level: string): boolean
+
+--- @class Jade.LogOptions
+--- @field enabled? boolean Enable logging
+--- @field level? string Log level: "debug", "info", "warn", "error"
+--- @field format? string Output format: "text" or "json"
+--- @field slow_query_threshold? number Slow query threshold in milliseconds
+--- @field log_bindings? boolean Log query bindings
+--- @field output? string|function Output target: "stdout", "file", or custom function
+--- @field file_path? string File path for file output
 local M = {}
 
 local config = {
@@ -49,6 +71,8 @@ local function emit(entry)
     end
 end
 
+--- Configure logging options
+--- @param opts Jade.LogOptions Logging configuration
 function M.configure(opts)
     if not opts then return end
     config.enabled = opts.enabled or config.enabled

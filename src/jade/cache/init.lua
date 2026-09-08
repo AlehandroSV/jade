@@ -1,4 +1,19 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Cache module for query result caching
+
+--- @class Jade.CacheModule
+--- @field configure fun(opts: Jade.CacheConfig)
+--- @field set fun(key: string, value: any, ttl?: number)
+--- @field get fun(key: string): any|nil
+--- @field delete fun(key: string)
+--- @field clear fun()
+--- @field keygen fun(table: string, args: any[]): string
 local M = {}
+
+--- @class Jade.CacheConfig
+--- @field driver? string Cache driver: "memory" (default)
+--- @field ttl? number Default TTL in seconds (default: 300)
+--- @field max_size? number Maximum cache entries (default: 1000)
 
 -- Cache stores
 local stores = {}
@@ -20,7 +35,8 @@ local function deepMerge(a, b)
     return result
 end
 
--- Initialize cache with config
+--- Initialize cache with configuration
+--- @param opts Jade.CacheConfig Cache configuration
 function M.configure(opts)
     config = deepMerge(default_config, opts or {})
 end
@@ -46,6 +62,9 @@ function MemoryStore.new(opts)
     }, MemoryStore)
 end
 
+--- Get a cached value
+--- @param key string Cache key
+--- @return any|nil Cached value or nil if expired/missing
 function MemoryStore:get(key)
     local entry = self.data[key]
     if entry == nil then return nil end

@@ -1,4 +1,27 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Security module for input validation and sanitization
+
+--- @class Jade.SecurityModule
+--- @field sanitizer Jade.Sanitizer Input sanitization
+--- @field validator Jade.Validator Input validation
+--- @field ratelimit Jade.RateLimiter Rate limiting
+--- @field init fun(options?: Jade.SecurityOptions)
+--- @field validateInput fun(data: table, columns: table): boolean
+--- @field validateQuery fun(sql: string, bindings: any[])
+--- @field validateOrderBy fun(column: string, direction: string)
+--- @field validateLimit fun(n: number)
+--- @field validateOffset fun(n: number)
+--- @field validateSelectItem fun(item: string)
+--- @field validateJoinTableName fun(name: string)
+--- @field sanitize fun(value: string): string
+--- @field escapeLuaString fun(value: string): string
 local M = {}
+
+--- @class Jade.SecurityOptions
+--- @field max_query_length? number Maximum SQL query length
+--- @field max_parameters? number Maximum query parameters
+--- @field max_string_length? number Maximum string value length
+--- @field max_in_items? number Maximum items in IN clause
 
 -- Sanitizer module
 M.sanitizer = require("jade.security.sanitizer")
@@ -9,7 +32,8 @@ M.validator = require("jade.security.validator")
 -- Rate limiter module
 M.ratelimit = require("jade.security.ratelimit")
 
--- Initialize security module
+--- Initialize security module with options
+--- @param options? Jade.SecurityOptions Security configuration
 function M.init(options)
     options = options or {}
 
@@ -31,19 +55,10 @@ function M.init(options)
     end
 end
 
--- Validate input data for entity create/update
--- data: the input data table
--- columns: entity column definitions
---
--- Security approach:
--- - Column names validated via whitelist (validator.validateColumnName)
--- - Values are passed via prepared statements (bindings) - no SQL injection possible
--- - Type validation ensures correct data types
--- - String length validation prevents buffer overflow attacks
---
--- NOTE: SQL injection detection via regex has been removed from value validation.
--- The real protection comes from using prepared statements (bindings) for ALL values,
--- not from regex-based detection which can be bypassed.
+--- Validate input data for entity create/update
+--- @param data table Input data to validate
+--- @param columns table Entity column definitions
+--- @return boolean true if valid
 function M.validateInput(data, columns)
     if not data or not columns then
         return true

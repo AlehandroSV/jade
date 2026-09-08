@@ -1,4 +1,26 @@
+--- @meta declarations for Jade ORM — Lua Language Server type annotations
+--- @brief Multi-database support module
+
+--- @class Jade.DatabaseModule
+--- @field register fun(name: string, config: Jade.DatabaseConfig)
+--- @field connect fun(name: string): Jade.Driver
+--- @field setDefault fun(name: string)
+--- @field getDefault fun(): string?
+--- @field getNames fun(): string[]
+--- @field getConfig fun(name: string): Jade.DatabaseConfig?
+--- @field remove fun(name: string)
+--- @field addReplica fun(primary: string, replica_config: Jade.DatabaseConfig)
+--- @field useReplica fun(primary: string): Jade.Driver
 local M = {}
+
+--- @class Jade.DatabaseConfig
+--- @field driver? string Driver type: "postgresql", "mysql", "sqlite", "mariadb", "openresty"
+--- @field host? string Database host
+--- @field port? number Database port
+--- @field database string Database name
+--- @field user? string Database user
+--- @field password? string Database password
+--- @field ssl? boolean Use SSL connection
 
 -- Registered database connections
 local connections = {}
@@ -8,12 +30,16 @@ local default_connection = nil
 local replicas = {}
 local replica_index = {}
 
--- Register a named database connection
+--- Register a named database connection
+--- @param name string Connection name
+--- @param config Jade.DatabaseConfig Database configuration
 function M.register(name, config)
     connections[name] = config
 end
 
--- Connect to a named database
+--- Connect to a named database
+--- @param name string Connection name
+--- @return Jade.Driver Database driver
 function M.connect(name)
     local config = connections[name]
     if not config then
@@ -29,17 +55,20 @@ function M.connect(name)
     return driver
 end
 
--- Set the default connection name
+--- Set the default connection name
+--- @param name string Connection name
 function M.setDefault(name)
     default_connection = name
 end
 
--- Get the default connection name
+--- Get the default connection name
+--- @return string? Default connection name
 function M.getDefault()
     return default_connection
 end
 
--- Get all registered connection names
+--- Get all registered connection names
+--- @return string[] Connection names
 function M.getNames()
     local names = {}
     for name in pairs(connections) do
@@ -49,12 +78,15 @@ function M.getNames()
     return names
 end
 
--- Get config for a connection
+--- Get config for a connection
+--- @param name string Connection name
+--- @return Jade.DatabaseConfig? Database configuration
 function M.getConfig(name)
     return connections[name]
 end
 
--- Remove a connection
+--- Remove a connection
+--- @param name string Connection name
 function M.remove(name)
     connections[name] = nil
 end
