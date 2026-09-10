@@ -249,6 +249,8 @@ end
 ---------------------------------------------------------------------------
 
 --- Remove all hooks for a given plugin. Called during teardown.
+--- Regular hooks are stored as hooks[hook_type][plugin_name]; this must
+--- clear the plugin under every type axis, not hooks[plugin_name].
 --- @param plugin_name string
 function M.unregister(plugin_name)
     if plugin_name == "global" or plugin_name == "" then
@@ -259,7 +261,9 @@ function M.unregister(plugin_name)
         return
     end
 
-    hooks[plugin_name] = nil
+    for _, sources in pairs(hooks) do
+        sources[plugin_name] = nil
+    end
 
     globalExtendEntity[plugin_name] = nil
     globalExtendQuery[plugin_name] = nil
