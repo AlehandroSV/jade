@@ -353,7 +353,9 @@ end
 --- @return nil|table Result or nil
 function Entity:findUnique(options)
     if not options or not options.where then
-        error("findUnique requires a where clause")
+        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+            details = "findUnique requires a where clause",
+        }, 2)
     end
     return self:findFirst(options)
 end
@@ -459,7 +461,9 @@ end
 
 function Entity:insertAll(rows)
     if #rows == 0 then
-        error("Cannot insert zero rows")
+        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+            details = "Cannot insert zero rows",
+        }, 2)
     end
     local sql, bindings = self._driver:generateBulkInsert(self._table, rows, self)
     return self._driver:execute(sql, bindings)
@@ -487,7 +491,11 @@ end
 -- Resolve a single relation instruction, return the target record's id
 function Entity:_resolveRelation(relName, instruction)
     local rel = self._relations[relName]
-    if not rel then error("Relation '" .. relName .. "' not defined") end
+    if not rel then
+        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+            details = "Relation '" .. relName .. "' not defined",
+        }, 2)
+    end
     local target = rel.target
 
     if instruction.connect then

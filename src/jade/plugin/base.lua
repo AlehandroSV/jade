@@ -57,11 +57,12 @@ end
 --- @param opts table { name, version, description?, author?, license? }
 --- @return table plugin
 function M.new(opts)
+    local errors = require("jade.errors")
     if type(opts) ~= "table" or not opts.name then
-        error("plugin name is required")
+        errors.raise(errors.MISSING_REQUIRED_FIELD, { field = "plugin.name" }, 2)
     end
     if not opts.version then
-        error("plugin version is required")
+        errors.raise(errors.MISSING_REQUIRED_FIELD, { field = "plugin.version" }, 2)
     end
 
     local plugin = {

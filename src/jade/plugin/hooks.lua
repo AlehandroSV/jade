@@ -232,7 +232,10 @@ function M.fireAround(entity, method, fn)
             next = function() return execute_chain(idx_ + 1) end,
         })
         if not ok then
-            error("Plugin around hook (" .. method .. ", #" .. idx_ .. ") failed: " .. tostring(result_))
+            local errors = require("jade.errors")
+            errors.raise(errors.INVALID_INPUT, {
+                details = "Plugin around hook (" .. method .. ", #" .. idx_ .. ") failed: " .. tostring(result_),
+            }, 2)
         end
         return result_
     end

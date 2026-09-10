@@ -9,4 +9,6 @@ function QueryError.new(code, message, details)
     return self
 end
 
+QueryError.__tostring = JadeError.tostring
+
 return QueryError

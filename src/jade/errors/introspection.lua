@@ -9,4 +9,6 @@ function IntrospectionError.new(code, message, details)
     return self
 end
 
+IntrospectionError.__tostring = JadeError.tostring
+
 return IntrospectionError

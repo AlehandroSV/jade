@@ -15,6 +15,7 @@
 --- @field decryptFields fun(entity_name: string, row: table, columns: table): table
 --- @field validatePath fun(path: string, allowedExtension?: string): boolean
 local M = {}
+local errors = require("jade.errors")
 
 --- @class Jade.EncryptionConfig
 --- @field key? string Encryption key
@@ -47,28 +48,31 @@ local _warned_global_over_entity = false
 -- Validate and sanitize file path to prevent directory traversal and arbitrary file loading
 -- Exported as M.validatePath for testability
 function M.validatePath(path, allowedExtension)
+    local function reject()
+        errors.raise(errors.INVALID_INPUT, { details = "rejected by security policy" }, 3)
+    end
     if type(path) ~= "string" or path == "" then
-        error("Invalid path: rejected by security policy")
+        reject()
     end
 
     -- Reject paths with null bytes
     if path:find("\0", 1, true) then
-        error("Invalid path: rejected by security policy")
+        reject()
     end
 
     -- Reject directory traversal attempts (.. in any context: ../, ..\, etc.)
     if path:find("..", 1, true) then
-        error("Invalid path: rejected by security policy")
+        reject()
     end
 
     -- Reject absolute paths (Unix / or Windows drive letter with separator)
     if path:match("^/") or path:match("^%a:[\\/]") then
-        error("Invalid path: rejected by security policy")
+        reject()
     end
 
     -- Validate extension (allowedExtension must be alphanumeric)
     if allowedExtension and not path:match("%." .. allowedExtension .. "$") then
-        error("Invalid path: rejected by security policy")
+        reject()
     end
 
     return true
@@ -79,7 +83,7 @@ end
 --- @param opts table|nil Options: {key?, algorithm?, database_encrypted?, fields?, encrypt_fn?, decrypt_fn?}
 function M.setEntityConfig(entity_name, opts)
     if not entity_name or type(entity_name) ~= "string" then
-        error("setEntityConfig: entity_name must be a non-empty string")
+        errors.raise(errors.MISSING_REQUIRED_FIELD, { field = "entity_name" }, 2)
     end
 
     if entity_configs[entity_name] and opts then
@@ -147,11 +151,15 @@ function M.loadEncryptionFile(file_path)
     M.validatePath(file_path, "lua")
     local loader, err = loadfile(file_path)
     if not loader then
-        error("Failed to load encryption file '" .. file_path .. "': " .. tostring(err))
+        errors.raise(errors.CONFIG_INVALID, {
+            details = "Failed to load encryption file '" .. file_path .. "': " .. tostring(err),
+        }, 2)
     end
     local fn = loader()
     if type(fn) ~= "function" then
-        error("Encryption file '" .. file_path .. "' must return a function, got " .. type(fn))
+        errors.raise(errors.CONFIG_INVALID, {
+            details = "Encryption file '" .. file_path .. "' must return a function, got " .. type(fn),
+        }, 2)
     end
     return fn
 end
@@ -322,7 +330,10 @@ function M.wrapEncrypt(column_ref, driver, entity_name)
         -- Use session variable @jade_encryption_key to avoid key exposure in SQL
         return string.format("AES_ENCRYPT(%s, @jade_encryption_key)", column_ref)
     else
-        error("Database encryption is not supported for " .. driver_type .. ". Use PostgreSQL with pgcrypto or MySQL.")
+        errors.raise(errors.DRIVER_NOT_SUPPORTED, {
+            driver = driver_type,
+            details = "Database encryption requires PostgreSQL (pgcrypto) or MySQL",
+        }, 2)
     end
 end
 
@@ -351,7 +362,10 @@ function M.wrapDecrypt(column_ref, driver, entity_name, as_name)
         -- Use session variable @jade_encryption_key to avoid key exposure in SQL
         return string.format("CAST(AES_DECRYPT(%s, @jade_encryption_key) AS CHAR)%s", column_ref, alias)
     else
-        error("Database decryption is not supported for " .. driver_type .. ". Use PostgreSQL with pgcrypto or MySQL.")
+        errors.raise(errors.DRIVER_NOT_SUPPORTED, {
+            driver = driver_type,
+            details = "Database decryption requires PostgreSQL (pgcrypto) or MySQL",
+        }, 2)
     end
 end
 

@@ -9,4 +9,6 @@ function IntegrityError.new(code, message, details)
     return self
 end
 
+IntegrityError.__tostring = JadeError.tostring
+
 return IntegrityError
