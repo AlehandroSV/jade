@@ -2,6 +2,7 @@ local Driver = require("jade.driver.base")
 local Pool = require("jade.driver.pool")
 local Quoting = require("jade.util.quoting")
 local Json = require("jade.query.json")
+local errors = require("jade.errors")
 
 local function get_pgmoon()
     return require("pgmoon")
@@ -78,7 +79,15 @@ function PostgreSQL:_ensureConnected()
         end
         local ok, err = pg:connect()
         if not ok then
-            error("Failed to connect to PostgreSQL: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                host = self._config.host,
+                port = self._config.port,
+                user = self._config.user,
+                database = self._config.database,
+                message = tostring(err),
+                error = tostring(err),
+                details = tostring(err),
+            }, 2)
         end
         return pg
     end
@@ -162,7 +171,15 @@ function PostgreSQL:getConnection()
     end
     local ok, err = pg:connect()
     if not ok then
-        error("Failed to connect to PostgreSQL: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            host = self._config.host,
+            port = self._config.port,
+            user = self._config.user,
+            database = self._config.database,
+            message = tostring(err),
+            error = tostring(err),
+            details = tostring(err),
+        }, 2)
     end
     -- Set encryption key for new connection
     self:setEncryptionKey(pg)
@@ -172,21 +189,21 @@ end
 function PostgreSQL:beginTransaction(conn)
     local res, err = conn:query("BEGIN")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function PostgreSQL:commitTransaction(conn)
     local res, err = conn:query("COMMIT")
     if not res then
-        error("Failed to commit transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function PostgreSQL:rollbackTransaction(conn)
     local res, err = conn:query("ROLLBACK")
     if not res then
-        error("Failed to rollback transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
@@ -194,13 +211,21 @@ function PostgreSQL:executeWithConnection(conn, sql, bindings)
     if bindings and #bindings > 0 then
         local res, err = conn:query(sql, table.unpack(bindings))
         if not res then
-            error("Query failed: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+                sql = sql,
+            }, 2)
         end
         return res
     else
         local res, err = conn:query(sql)
         if not res then
-            error("Query failed: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+                sql = sql,
+            }, 2)
         end
         return res
     end
@@ -217,13 +242,21 @@ function PostgreSQL:execute(sql, bindings)
     if bindings and #bindings > 0 then
         local res, err = self._conn:query(sql, table.unpack(bindings))
         if not res then
-            error("Query failed: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+                sql = sql,
+            }, 2)
         end
         return res
     else
         local res, err = self._conn:query(sql)
         if not res then
-            error("Query failed: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+                sql = sql,
+            }, 2)
         end
         return res
     end

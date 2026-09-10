@@ -61,6 +61,9 @@ local Jade = {
     _VERSION = require("jade._VERSION"),
 }
 
+-- Errors (typed catalog J0xxx–J5xxx)
+Jade.errors = require("jade.errors")
+
 -- Types
 Jade.String = require("jade.types.string")
 Jade.Integer = require("jade.types.integer")

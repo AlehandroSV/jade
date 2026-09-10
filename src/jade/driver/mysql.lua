@@ -2,6 +2,7 @@ local Driver = require("jade.driver.base")
 local Pool = require("jade.driver.pool")
 local Quoting = require("jade.util.quoting")
 local Json = require("jade.query.json")
+local errors = require("jade.errors")
 
 local MySQL = {}
 MySQL.__index = MySQL
@@ -163,11 +164,24 @@ function MySQL:_ensureConnected()
         self:_restoreSSLEnv(saved_env)
 
         if not success then
-            error("Failed to connect to MySQL: " .. tostring(result))
+            errors.raise(errors.classifyDriverError(result), {
+                host = self._config and self._config.host or "",
+                port = self._config and self._config.port or 0,
+                user = self._config and self._config.user or "",
+                database = self._config and self._config.database or "",
+                message = tostring(result),
+                error = tostring(result),
+                details = tostring(result),
+            }, 2)
         end
         local conn = result
         if not conn then
-            error("Failed to connect to MySQL: nil returned")
+            errors.raise(errors.CONNECTION_REFUSED, {
+                host = self._config and self._config.host or "",
+                port = self._config and self._config.port or 0,
+                message = "nil returned",
+                error = "nil returned",
+            }, 2)
         end
         return conn
     end
@@ -241,11 +255,24 @@ function MySQL:getConnection()
     self:_restoreSSLEnv(saved_env)
 
     if not success then
-        error("Failed to connect to MySQL: " .. tostring(result))
+        errors.raise(errors.classifyDriverError(result), {
+            host = self._config and self._config.host or "",
+            port = self._config and self._config.port or 0,
+            user = self._config and self._config.user or "",
+            database = self._config and self._config.database or "",
+            message = tostring(result),
+            error = tostring(result),
+            details = tostring(result),
+        }, 2)
     end
     local conn = result
     if not conn then
-        error("Failed to connect to MySQL: nil returned")
+        errors.raise(errors.CONNECTION_REFUSED, {
+            host = self._config and self._config.host or "",
+            port = self._config and self._config.port or 0,
+            message = "nil returned",
+            error = "nil returned",
+        }, 2)
     end
     -- Set encryption key for new connection
     self:setEncryptionKey(conn)
@@ -255,7 +282,7 @@ end
 function MySQL:beginTransaction(conn)
     local res, err = conn:execute("START TRANSACTION")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
@@ -318,7 +345,11 @@ function MySQL:executeWithConnection(conn, sql, bindings)
         res, err = conn:execute(converted_sql)
     end
     if not res then
-        error("Query failed: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+            sql = sql,
+        }, 2)
     end
     return res
 end
@@ -346,7 +377,7 @@ function MySQL:execute(sql, bindings)
         res, err = self._conn:execute(converted_sql)
     end
     if not res then
-        error("Query failed: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), { error = tostring(err), message = tostring(err), sql = sql }, 2)
     end
     return res
 end

@@ -2,6 +2,7 @@ local Driver = require("jade.driver.base")
 local Pool = require("jade.driver.pool")
 local Quoting = require("jade.util.quoting")
 local Json = require("jade.query.json")
+local errors = require("jade.errors")
 
 local SQLite = {}
 SQLite.__index = SQLite
@@ -59,7 +60,12 @@ function SQLite:_ensureConnected()
     local function connect()
         local conn, err = self._env:connect(self._config.database)
         if not conn then
-            error("Failed to connect to SQLite: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                database = self._config.database,
+                message = tostring(err),
+                error = tostring(err),
+                details = tostring(err),
+            }, 2)
         end
 
         -- Enable WAL mode for better concurrency
@@ -105,7 +111,7 @@ end
 function SQLite:getConnection()
     local conn, err = self._env:connect(self._config.database)
     if not conn then
-        error("Failed to connect to SQLite: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), { database = self._config and self._config.database or "", message = tostring(err), error = tostring(err), details = tostring(err) }, 2)
     end
     return conn
 end
@@ -176,7 +182,11 @@ function SQLite:executeWithConnection(conn, sql, bindings)
         res, err = conn:execute(converted_sql)
     end
     if res == nil then
-        error("Query failed: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+            sql = sql,
+        }, 2)
     end
     return res
 end
@@ -197,7 +207,11 @@ function SQLite:execute(sql, bindings)
         res, err = self._conn:execute(converted_sql)
     end
     if res == nil then
-        error("Query failed: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+            sql = sql,
+        }, 2)
     end
     return res
 end
