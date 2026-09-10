@@ -168,12 +168,22 @@ function M.escapeValue(value, column_type)
         return M.escapeString(value)
     elseif column_type == "integer" or column_type == "float" or column_type == "decimal" then
         if type(value) ~= "number" then
-            error("Expected number, got " .. type(value))
+            local errors = require("jade.errors")
+            errors.raise(errors.TYPE_MISMATCH, {
+                field = "value",
+                expected = "number",
+                received = type(value),
+            }, 2)
         end
         return tostring(value)
     elseif column_type == "boolean" then
         if type(value) ~= "boolean" then
-            error("Expected boolean, got " .. type(value))
+            local errors = require("jade.errors")
+            errors.raise(errors.TYPE_MISMATCH, {
+                field = "value",
+                expected = "boolean",
+                received = type(value),
+            }, 2)
         end
         return value and "TRUE" or "FALSE"
     elseif column_type == "timestamp" or column_type == "date" then

@@ -35,5 +35,13 @@ end
 
 JadeError.__tostring = JadeError.tostring
 
+--- Attach JadeError metamethods to a subclass metatable (Lua does not inherit __tostring via __index).
+function JadeError.attach(Class)
+    Class.__index = Class
+    Class.__tostring = JadeError.tostring
+    setmetatable(Class, { __index = JadeError })
+    return Class
+end
+
 return JadeError
 

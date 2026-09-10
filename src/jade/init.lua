@@ -89,14 +89,8 @@ Jade.Relations = require("jade.entity.relations")
 -- Migration
 Jade.migration = require("jade.migration")
 
--- Seed
-Jade.Seed = require("jade.seed")
-
 -- Transaction
 Jade.transaction = require("jade.transaction.manager")
-
--- Soft Delete
-Jade.SoftDelete = require("jade.entity.soft_delete")
 
 -- Events
 Jade.Events = require("jade.entity.events")
@@ -104,34 +98,31 @@ Jade.Events = require("jade.entity.events")
 -- Security
 Jade.security = require("jade.security")
 
--- Audit (lazy load to avoid circular dependency)
+-- Lazy modules: load on first access (lighter require("jade"))
+local LAZY_MODULES = {
+    Audit = "jade.audit",
+    Encryption = "jade.encryption",
+    SoftDelete = "jade.entity.soft_delete",
+    Seed = "jade.seed",
+    Schema = "jade.schema",
+    Declarative = "jade.schema.declarative",
+    Cache = "jade.cache",
+    Database = "jade.database",
+}
+
 setmetatable(Jade, {
     __index = function(t, key)
-        if key == "Audit" then
-            local Audit = require("jade.audit")
-            rawset(t, "Audit", Audit)
-            return Audit
+        local mod = LAZY_MODULES[key]
+        if mod then
+            local loaded = require(mod)
+            rawset(t, key, loaded)
+            return loaded
         end
     end
 })
 
--- Encryption
-Jade.Encryption = require("jade.encryption")
-
--- Schema (DDL operations)
-Jade.Schema = require("jade.schema")
-
--- Declarative Schema
-Jade.Declarative = require("jade.schema.declarative")
-
 -- Driver registry
 Jade.drivers = require("jade.driver")
-
--- Cache
-Jade.cache = require("jade.cache")
-
--- Database (multi-database support)
-Jade.database = require("jade.database")
 
 -- Config
 Jade.config = require("jade.config")
@@ -192,7 +183,9 @@ function Jade.configure(opts)
         local results_ = Jade.pluginLoader.loadAll(Jade, opts.plugins)
         for name_, res_ in pairs(results_) do
             if not res_.ok then
-                error("failed to load plugin '" .. name_ .. "': " .. tostring(res_.error))
+                Jade.errors.raise(Jade.errors.CONFIG_INVALID, {
+                    details = "failed to load plugin '" .. name_ .. "': " .. tostring(res_.error),
+                }, 2)
             end
         end
     end
@@ -219,7 +212,7 @@ end
 function Jade.driver()
     local driver = context.get("driver")
     if not driver then
-        error("Jade not configured. Call jade.configure() first.")
+        Jade.errors.raise(Jade.errors.CONFIG_MISSING, { path = "jade.configure()" }, 2)
     end
     return driver
 end
@@ -331,7 +324,7 @@ end
 function Jade.loadSchema(filepath)
     local f = io.open(filepath, "r")
     if not f then
-        error("Schema file not found: " .. filepath)
+        Jade.errors.raise(Jade.errors.CONFIG_MISSING, { path = filepath }, 2)
     end
     local content = f:read("*a")
     f:close()

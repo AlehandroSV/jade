@@ -15,4 +15,6 @@ function QueryTimeoutError.new(timeout_ms, sql)
     return self
 end
 
+QueryTimeoutError.__tostring = JadeError.tostring
+
 return QueryTimeoutError

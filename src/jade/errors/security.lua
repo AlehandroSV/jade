@@ -9,4 +9,6 @@ function SecurityError.new(code, message, details)
     return self
 end
 
+SecurityError.__tostring = JadeError.tostring
+
 return SecurityError

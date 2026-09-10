@@ -9,4 +9,6 @@ function MigrationError.new(code, message, details)
     return self
 end
 
+MigrationError.__tostring = JadeError.tostring
+
 return MigrationError
