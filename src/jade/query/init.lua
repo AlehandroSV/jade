@@ -852,9 +852,14 @@ function Query:toSQL()
     end
 
     local driver = self._entity._driver
-    local sql, bindings = driver:generateSelect(self)
-    Security.validateQuery(sql, bindings)
+    local ok, sql, bindings = pcall(function()
+        local generated_sql, generated_bindings = driver:generateSelect(self)
+        Security.validateQuery(generated_sql, generated_bindings)
+        return generated_sql, generated_bindings
+    end)
+    -- Always restore, even if generateSelect/validateQuery threw (#174)
     self._where = orig_where
+    if not ok then error(sql, 0) end
     return sql, bindings
 end
 
