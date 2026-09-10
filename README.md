@@ -1,8 +1,13 @@
+<p align="center">
+  <img src="assets/readme-banner.png" alt="Jade — modern ORM for Lua" width="100%" />
+</p>
+
 # Jade
 
 > A modern ORM for Lua.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Lua](https://img.shields.io/badge/Lua-5.1%2B-blue.svg)](https://www.lua.org/)
 
 [![Portugues](https://img.shields.io/badge/Portugu%C3%AAs-readme-blue)](#pt-br)
 [![English](https://img.shields.io/badge/English-readme-green)](#en)
@@ -922,7 +927,7 @@ Post = jade.Entity("posts", {
 | Warning | `String` without length, `created_at` without `defaultNow()` |
 | Info | Auto primary key, inferred `belongsTo` relation |
 
-For full documentation, see the [jade-linter README](https://github.com/AlehandroSV/jade-linter).
+For full documentation, see the [jade-linter README](https://github.com/Jade-ORM/jade-linter).
 
 ### License
 
@@ -1326,7 +1331,7 @@ Post = jade.Entity("posts", {
 | Aviso | `String` sem tamanho, `created_at` sem `defaultNow()` |
 | Info | Primary key automatica, relacao `belongsTo` inferida |
 
-Para documentacao completa, veja o [README do jade-linter](https://github.com/AlehandroSV/jade-linter).
+Para documentacao completa, veja o [README do jade-linter](https://github.com/Jade-ORM/jade-linter).
 
 ### Licenca
 
