@@ -27,6 +27,9 @@ jobs:
       - name: Install LuaRocks
         uses: leafo/gh-actions-luarocks@v4
 
+      - name: Install JSON library
+        run: luarocks install dkjson
+
       - name: Prepare rockspec
         run: |
           VERSION="${{ inputs.version }}"
