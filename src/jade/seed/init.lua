@@ -5,37 +5,40 @@ local errors = require("jade.errors")
 local seed_files = {}
 
 -- Validate and sanitize file path to prevent directory traversal and arbitrary file loading
-local function validatePath(path, allowedExtension)
-    local function reject(details)
-        errors.raise(errors.INVALID_INPUT, { details = details }, 3)
+-- Exported as M.validatePath for testability
+function M.validatePath(path, allowedExtension)
+    local function reject()
+        errors.raise(errors.INVALID_INPUT, { details = "rejected by security policy" }, 3)
     end
     if type(path) ~= "string" or path == "" then
-        reject("Invalid path: must be a non-empty string")
+        reject()
     end
 
     -- Reject paths with null bytes
-    if path:find("\0") then
-        reject("Invalid path: contains null byte")
+    if path:find("\0", 1, true) then
+        reject()
     end
 
-    -- Reject directory traversal attempts
-    if path:match("%.%.%/?") or path:match("/%.%.") then
-        reject("Invalid path: directory traversal not allowed")
+    -- Reject directory traversal attempts (.. in any context: ../, ..\, etc.)
+    if path:find("..", 1, true) then
+        reject()
     end
 
-    -- Reject absolute paths outside current directory context
-    -- Allow relative paths only
-    if path:match("^/") or (path:match("^%a:") and not path:match("^%a:[\\/]")) then
-        reject("Invalid path: use relative paths only")
+    -- Reject absolute paths: Unix /, Windows drive (C: or C:\), UNC \\
+    if path:match("^/") or path:match("^%a:") or path:match("^\\\\") then
+        reject()
     end
 
-    -- Validate extension
+    -- Validate extension (allowedExtension must be alphanumeric)
     if allowedExtension and not path:match("%." .. allowedExtension .. "$") then
-        reject("Invalid path: must have ." .. allowedExtension .. " extension")
+        reject()
     end
 
     return true
 end
+
+-- Local alias for internal call sites
+local validatePath = M.validatePath
 
 -- Register a seed file
 function M.register(name, path)

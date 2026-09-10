@@ -65,8 +65,8 @@ function M.validatePath(path, allowedExtension)
         reject()
     end
 
-    -- Reject absolute paths (Unix / or Windows drive letter with separator)
-    if path:match("^/") or path:match("^%a:[\\/]") then
+    -- Reject absolute paths: Unix /, Windows drive (C: or C:\), UNC \\
+    if path:match("^/") or path:match("^%a:") or path:match("^\\\\") then
         reject()
     end
 
