@@ -60,10 +60,14 @@ local function validateEnvName(name)
     -- Environment variable names must be alphanumeric and underscores only
     -- This prevents command injection through malicious environment variable names
     if type(name) ~= "string" or name == "" then
-        error("Invalid environment variable name: rejected by security policy")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Invalid environment variable name: rejected by security policy",
+        }, 2)
     end
     if not name:match("^[A-Z_][A-Z0-9_]*$") then
-        error("Invalid environment variable name: rejected by security policy")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Invalid environment variable name: rejected by security policy",
+        }, 2)
     end
     return true
 end
@@ -239,7 +243,10 @@ function MySQL:setEncryptionKey(conn)
         local sql = "SET @jade_encryption_key = '" .. escaped_key .. "'"
         local res, err = conn:execute(sql)
         if not res then
-            error("Failed to set encryption key session variable: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+            }, 2)
         end
     end
 end
@@ -294,14 +301,14 @@ end
 function MySQL:commitTransaction(conn)
     local res, err = conn:execute("COMMIT")
     if not res then
-        error("Failed to commit transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function MySQL:rollbackTransaction(conn)
     local res, err = conn:execute("ROLLBACK")
     if not res then
-        error("Failed to rollback transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
@@ -311,7 +318,10 @@ function MySQL:setQueryTimeout(timeout_ms)
     local sql = "SET max_execution_time = " .. tostring(timeout_ms)
     local res, err = self._conn:execute(sql)
     if not res then
-        error("Failed to set query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -321,7 +331,10 @@ function MySQL:clearQueryTimeout()
     local sql = "SET max_execution_time = 0"
     local res, err = self._conn:execute(sql)
     if not res then
-        error("Failed to clear query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -610,7 +623,9 @@ end
 
 function MySQL:generateBulkInsert(table_name, rows, entity)
     if #rows == 0 then
-        error("Cannot bulk insert zero rows")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Cannot bulk insert zero rows",
+        }, 2)
     end
 
     local columns = {}
@@ -772,7 +787,10 @@ function MySQL:getLastInsertId()
     self:_ensureConnected()
     local res, err = self._conn:execute("SELECT LAST_INSERT_ID() as id")
     if not res then
-        error("Failed to get last insert id: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
     local row = res:fetch({}, "a")
     return row and row.id
@@ -802,7 +820,7 @@ function MySQL:transaction(fn)
     local conn = self._conn
     local res, err = conn:execute("START TRANSACTION")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 
     local ok, fn_err = pcall(fn)
@@ -810,7 +828,7 @@ function MySQL:transaction(fn)
     if ok then
         local commit_res, commit_err = conn:execute("COMMIT")
         if not commit_res then
-            error("Failed to commit transaction: " .. tostring(commit_err))
+            errors.raise(errors.TRANSACTION_FAILED, { error = tostring(commit_err) }, 2)
         end
         return true
     else
@@ -818,7 +836,9 @@ function MySQL:transaction(fn)
         if not rollback_res then
             -- Connection may be in undefined state after failed rollback
             self._conn = nil
-            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+            errors.raise(errors.TRANSACTION_FAILED, {
+                error = tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err),
+            }, 2)
         end
         -- Re-raise original error preserving context
         error(fn_err, 2)

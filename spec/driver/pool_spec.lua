@@ -139,9 +139,13 @@ describe("Connection Pool", function()
 
             pool:acquire()
 
-            assert.has_error(function()
+            local ok, err = pcall(function()
                 pool:acquire()
             end)
+            assert.is_false(ok)
+            assert.are.equal("table", type(err))
+            assert.are.equal("J0009", err.code)
+            assert.is_truthy(tostring(err):match("pool exhausted"))
         end)
     end)
 

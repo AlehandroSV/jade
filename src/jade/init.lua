@@ -538,7 +538,9 @@ function Jade.init(schema_path, opts)
     local config_path = opts.config_path or "jade.config.lua"
     local config_ok, config = pcall(dofile, config_path)
     if not config_ok then
-        error("Failed to load config from " .. config_path .. ": " .. tostring(config))
+        Jade.errors.raise(Jade.errors.CONFIG_INVALID, {
+            details = "Failed to load config from " .. config_path .. ": " .. tostring(config),
+        }, 2)
     end
 
     -- Apply overrides
