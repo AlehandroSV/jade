@@ -196,6 +196,7 @@ local test_files = {
     "query/state_isolation_spec.lua",
     "query/safe_bulk_spec.lua",
     "util/log_spec.lua",
+    "util/hash_spec.lua",
     "query/json_operators_spec.lua",
     "cache/cache_spec.lua",
     "encryption/encryption_spec.lua",
