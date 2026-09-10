@@ -52,6 +52,7 @@ Jade is a modern ORM/Data Mapper for Lua that offers a modern development experi
 - **Test Helpers** - setup, truncateAll, transaction with auto-rollback, factory pattern
 - **Seed System** - Register, execute, factory-based with faker defaults
 - **Security** - SQL injection detection, identifier quoting, input validation
+- **Typed Errors** - Public `jade.errors` catalog with `J####` codes on critical paths
 - **LuaLS Type Generation** - IDE autocomplete annotations from entity definitions
 
 ### Installation

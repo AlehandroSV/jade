@@ -1,17 +1,18 @@
 package = "jade"
 version = "scm-1"
 source = {
-    url = "git://github.com/AlehandroSV/Jade.git",
-    dir = "Jade"
+    url = "git+https://github.com/Jade-ORM/jade-orm-core.git",
+    dir = "jade-orm-core"
 }
 description = {
-    summary = "Um ORM moderno para Lua",
+    summary = "A modern ORM for Lua",
     detailed = [[
-        Jade e um ORM/Data Mapper moderno para Lua.
-        Features: schema declarativo, migrations automaticas,
-        query builder, relacoes, paginacao, transactions e soft delete.
+        Jade is a modern ORM/Data Mapper for Lua.
+        Features: declarative schema, automatic migrations,
+        query builder, relations, pagination, transactions,
+        soft delete, and a typed error catalog (J####).
     ]],
-    homepage = "https://github.com/AlehandroSV/jade",
+    homepage = "https://github.com/Jade-ORM/jade-orm-core",
     license = "MIT"
 }
 dependencies = {
