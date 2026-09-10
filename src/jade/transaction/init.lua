@@ -1,3 +1,5 @@
+local errors = require("jade.errors")
+
 local Transaction = {}
 Transaction.__index = Transaction
 
@@ -11,7 +13,9 @@ end
 
 function Transaction:start()
     if self._active then
-        error("Transaction already active")
+        errors.raise(errors.TRANSACTION_FAILED, {
+            error = "Transaction already active",
+        }, 2)
     end
     self._conn = self._driver:getConnection()
     self._driver:beginTransaction(self._conn)
@@ -21,7 +25,9 @@ end
 
 function Transaction:commit()
     if not self._active then
-        error("No active transaction")
+        errors.raise(errors.TRANSACTION_FAILED, {
+            error = "No active transaction",
+        }, 2)
     end
     self._driver:commitTransaction(self._conn)
     self._active = false
@@ -30,7 +36,9 @@ end
 
 function Transaction:rollback()
     if not self._active then
-        error("No active transaction")
+        errors.raise(errors.TRANSACTION_FAILED, {
+            error = "No active transaction",
+        }, 2)
     end
     self._driver:rollbackTransaction(self._conn)
     self._active = false
@@ -47,7 +55,9 @@ end
 
 function Transaction:execute(sql, bindings)
     if not self._active then
-        error("No active transaction")
+        errors.raise(errors.TRANSACTION_FAILED, {
+            error = "No active transaction",
+        }, 2)
     end
     return self._driver:executeWithConnection(self._conn, sql, bindings)
 end

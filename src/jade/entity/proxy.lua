@@ -1,3 +1,5 @@
+local JadeErrors = require("jade.errors")
+
 local Proxy = {}
 Proxy.__index = function(self, key)
     local data = rawget(self, "_data")
@@ -32,7 +34,9 @@ function Proxy:load()
     local driver = target._driver
 
     if not driver then
-        error("Cannot load relation: no driver configured")
+        JadeErrors.raise(JadeErrors.CONFIG_MISSING, {
+            path = "driver",
+        }, 2)
     end
 
     local value
@@ -136,7 +140,9 @@ function Proxy:connect(id_or_where)
     end
 
     if not record then
-        error("Cannot connect: record not found")
+        JadeErrors.raise(JadeErrors.NO_ROWS_FOUND, {
+            table = target._table,
+        }, 2)
     end
 
     if relation.type == "belongsTo" then

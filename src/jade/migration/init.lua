@@ -5,6 +5,7 @@ local tracker = require("jade.migration.tracker")
 local runner = require("jade.migration.runner")
 local diff = require("jade.migration.diff")
 local generator = require("jade.migration.generator")
+local errors = require("jade.errors")
 
 --- @class Jade.MigrationModule
 --- @field tracker Jade.MigrationTracker Migration tracking module
@@ -70,7 +71,10 @@ function M.migrate(driver)
             for _, name in ipairs(applied_names) do
                 tracker.recordMigration(driver, name)
             end
-            error("Migration failed: " .. f.name)
+            errors.raise(errors.MIGRATION_FAILED, {
+                name = f.name,
+                error = tostring(err),
+            }, 2)
         end
     end
 
@@ -119,7 +123,7 @@ function M.rollback(driver, opts)
             results[#results + 1] = { name = name, success = false, error = err }
             print("  Failed: " .. name .. "\n  Error: " .. tostring(err))
             if not first_error then
-                first_error = "Rollback failed: " .. name
+                first_error = { name = name, error = tostring(err) }
             end
         end
     end
@@ -130,7 +134,10 @@ function M.rollback(driver, opts)
     end
 
     if first_error then
-        error(first_error)
+        errors.raise(errors.MIGRATION_ROLLBACK_FAILED, {
+            name = first_error.name,
+            error = first_error.error,
+        }, 2)
     end
 
     return results

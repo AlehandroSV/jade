@@ -128,7 +128,10 @@ function PostgreSQL:setEncryptionKey(conn)
         local sql = "SELECT set_config('jade.encryption_key', $1, true)"
         local res, err = conn:query(sql, key)
         if not res then
-            error("Failed to set encryption key session variable: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+            }, 2)
         end
     end
 end
@@ -139,7 +142,10 @@ function PostgreSQL:setQueryTimeout(timeout_ms)
     local sql = "SET statement_timeout = " .. tostring(timeout_ms)
     local res, err = self._conn:query(sql)
     if not res then
-        error("Failed to set query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -149,7 +155,10 @@ function PostgreSQL:clearQueryTimeout()
     local sql = "SET statement_timeout = 0"
     local res, err = self._conn:query(sql)
     if not res then
-        error("Failed to clear query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -501,7 +510,9 @@ end
 
 function PostgreSQL:generateBulkInsert(table_name, rows, entity)
     if #rows == 0 then
-        error("Cannot bulk insert zero rows")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Cannot bulk insert zero rows",
+        }, 2)
     end
 
     local columns = {}
@@ -716,7 +727,7 @@ function PostgreSQL:transaction(fn)
     local conn = self._conn
     local res, err = conn:query("BEGIN")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 
     local ok, fn_err = pcall(fn)
@@ -724,7 +735,7 @@ function PostgreSQL:transaction(fn)
     if ok then
         local commit_res, commit_err = conn:query("COMMIT")
         if not commit_res then
-            error("Failed to commit transaction: " .. tostring(commit_err))
+            errors.raise(errors.TRANSACTION_FAILED, { error = tostring(commit_err) }, 2)
         end
         return true
     else
@@ -732,7 +743,9 @@ function PostgreSQL:transaction(fn)
         if not rollback_res then
             -- Connection may be in undefined state after failed rollback
             self._conn = nil
-            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+            errors.raise(errors.TRANSACTION_FAILED, {
+                error = tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err),
+            }, 2)
         end
         -- Re-raise original error preserving context
         error(fn_err, 2)

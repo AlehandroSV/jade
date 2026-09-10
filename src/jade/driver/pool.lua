@@ -1,3 +1,5 @@
+local errors = require("jade.errors")
+
 local Pool = {}
 Pool.__index = Pool
 
@@ -142,7 +144,9 @@ function Pool:acquire()
         return self:acquire()
     end
 
-    error("Connection pool exhausted (max: " .. self.max_size .. ")")
+    errors.raise(errors.CONNECTION_POOL_EXHAUSTED, {
+        limit = self.max_size,
+    }, 2)
 end
 
 function Pool:release(conn)

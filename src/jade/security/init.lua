@@ -73,7 +73,12 @@ function M.validateInput(data, columns)
         if col_def then
             -- Validate type
             if not M.sanitizer.validateType(value, col_def.type) then
-                error("Type mismatch for column '" .. key .. "': expected " .. col_def.type)
+                local errors = require("jade.errors")
+                errors.raise(errors.TYPE_MISMATCH, {
+                    field = key,
+                    expected = col_def.type,
+                    received = type(value),
+                }, 2)
             end
 
             -- Validate string length

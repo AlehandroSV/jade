@@ -5,6 +5,8 @@
 --- @field register fun(name: string, module: Jade.Driver)
 --- @field get fun(name: string): Jade.Driver
 
+local errors = require("jade.errors")
+
 local drivers = {}
 local driver_modules = {}
 
@@ -31,7 +33,10 @@ local function get(name)
         return driver
     end
 
-    error("Unknown driver: " .. tostring(name))
+    errors.raise(errors.DRIVER_NOT_FOUND, {
+        driver = tostring(name),
+        available = table.concat({ "postgresql", "mysql", "sqlite", "openresty", "mariadb" }, ", "),
+    }, 2)
 end
 
 -- Register drivers lazily to avoid loading errors

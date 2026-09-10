@@ -46,11 +46,15 @@ describe("HABTM Pivot SQL Injection Prevention", function()
         local user_instance = require("jade.entity.instance").new(User, { id = 1 })
         User._driver = MockDriver
 
-        assert.has_error(function()
+        local ok, err = pcall(function()
             User:_resolveChildren({
                 tags = { connect = { id = 5 } }
             }, user_instance)
         end)
+        assert.is_false(ok)
+        assert.are.equal("table", type(err))
+        assert.are.equal("J5001", err.code)
+        assert.is_truthy(tostring(err))
     end)
 
     it("rejects semicolons in foreign key names", function()
@@ -71,11 +75,14 @@ describe("HABTM Pivot SQL Injection Prevention", function()
         local user_instance = require("jade.entity.instance").new(User, { id = 1 })
         User._driver = MockDriver
 
-        assert.has_error(function()
+        local ok, err = pcall(function()
             User:_resolveChildren({
                 posts = { connect = { id = 10 } }
             }, user_instance)
         end)
+        assert.is_false(ok)
+        assert.are.equal("table", type(err))
+        assert.are.equal("J5001", err.code)
     end)
 
     it("uses ? placeholders instead of $1 $2 syntax", function()

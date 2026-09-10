@@ -518,7 +518,9 @@ function Entity:_resolveRelation(relName, instruction)
         -- { connect = { id = N } } or { connect = { email = "..." } }
         local record = target:findUnique({ where = instruction.connect })
         if not record then
-            error("Cannot connect: no " .. target._table .. " found with " .. require("dkjson").encode(instruction.connect))
+            JadeErrors.raise(JadeErrors.NO_ROWS_FOUND, {
+                table = target._table,
+            }, 2)
         end
         return record._data.id
 
@@ -540,7 +542,10 @@ function Entity:_resolveRelation(relName, instruction)
         return instruction.id
 
     else
-        error("Invalid relation instruction for '" .. relName .. "'. Use { connect = {...} }, { create = {...} }, or { connectOrCreate = {...} }")
+        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+            details = "Invalid relation instruction for '" .. relName
+                .. "'. Use { connect = {...} }, { create = {...} }, or { connectOrCreate = {...} }",
+        }, 2)
     end
 end
 
@@ -586,16 +591,17 @@ function Entity:_resolveChildren(relations_data, parentInstance)
 
                     -- Guard against nil/empty values
                     if join_table == "" or source_fk == "" or target_fk == "" then
-                        error("HABTM relation '" .. key .. "' has empty join_table or foreign keys")
+                        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+                            details = "HABTM relation '" .. key .. "' has empty join_table or foreign keys",
+                        }, 2)
                     end
 
                     -- Validate identifier format to prevent SQL injection via table/column names
                     local function validate_identifier(name, label)
                         if not name:match("^[%a_][%w_]*$") then
-                            error(string.format(
-                                "Invalid %s '%s' in HABTM relation '%s'. Must be alphanumeric/underscore starting with letter or underscore.",
-                                label, name, key
-                            ))
+                            JadeErrors.raise(JadeErrors.INVALID_IDENTIFIER, {
+                                identifier = name,
+                            }, 2)
                         end
                     end
 
