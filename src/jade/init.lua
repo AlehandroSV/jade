@@ -192,6 +192,11 @@ function Jade.configure(opts)
 
     driver:connect(db)
 
+    -- Wire plugin query hooks (beforeQuery/afterQuery) onto this driver
+    if Jade.plugin and Jade.plugin.applyDriverExtensions then
+        Jade.plugin.applyDriverExtensions(driver)
+    end
+
     context.set("driver", driver)
     context.set("config", db)
 

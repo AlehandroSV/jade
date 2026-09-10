@@ -113,5 +113,8 @@ build = {
         ["jade.plugin.audit"] = "src/jade/plugin/audit.lua",
         ["jade.plugin.encryption"] = "src/jade/plugin/encryption.lua",
         ["jade.plugin.cache"] = "src/jade/plugin/cache.lua",
+        ["jade.plugin.timestamps"] = "src/jade/plugin/timestamps.lua",
+        ["jade.plugin.tenant"] = "src/jade/plugin/tenant.lua",
+        ["jade.plugin.sql_log"] = "src/jade/plugin/sql_log.lua",
     }
 }

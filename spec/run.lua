@@ -200,6 +200,7 @@ local test_files = {
     "encryption/encryption_spec.lua",
     "audit/audit_spec.lua",
     "database/database_spec.lua",
+    "plugin/plugin_system_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")

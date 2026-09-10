@@ -19,6 +19,16 @@ local Events = require("jade.entity.events")
 local Security = require("jade.security")
 local JadeErrors = require("jade.errors")
 
+--- Fire plugin CRUD hooks (beforeCreate, afterUpdate, ...) alongside Callbacks.
+local function firePluginCRUD(entity, method, event, instance, data)
+    local ok, plugin = pcall(require, "jade.plugin")
+    if not ok or not plugin.hooks then return end
+    local reg = plugin.hooks()
+    if type(reg) == "table" and type(reg.fireCRUD) == "function" then
+        pcall(reg.fireCRUD, entity, method, event, instance, data)
+    end
+end
+
 local Entity = {}
 Entity.__index = function(self, key)
     -- Check if key is a method
@@ -72,6 +82,12 @@ function Entity.new(table_name, columns, options)
     -- Setup validations and callbacks
     Validations.setup(model)
     Callbacks.setup(model)
+
+    -- Plugin extendEntity hooks (methods/columns added by plugins)
+    local ok_plugin, plugin_api = pcall(require, "jade.plugin")
+    if ok_plugin and type(plugin_api.applyEntityExtensions) == "function" then
+        plugin_api.applyEntityExtensions(model)
+    end
 
     -- Auto-connect to assigned database if available
     if model._database then
@@ -642,6 +658,7 @@ function Entity:create(data)
     local result = Callbacks.runAround(self, "around_save", nil, columns_data, function()
         Callbacks.run(self, "before_save", nil, columns_data)
         Callbacks.run(self, "before_create", nil, columns_data)
+        firePluginCRUD(self, "create", "before", nil, columns_data)
 
         -- Prepare data with encryption markers
         local Encryption = require("jade.encryption")
@@ -662,6 +679,7 @@ function Entity:create(data)
 
         Callbacks.run(self, "after_create", instance, data)
         Callbacks.run(self, "after_save", instance, data)
+        firePluginCRUD(self, "create", "after", instance, data)
 
         -- Fire built-in event
         Events.fire(self, "created", { instance = instance, data = data })
@@ -722,6 +740,7 @@ function Entity:update(id_or_options, data)
         local result = Callbacks.runAround(self, "around_save", nil, update_data, function()
             Callbacks.run(self, "before_save", nil, update_data)
             Callbacks.run(self, "before_update", nil, update_data)
+            firePluginCRUD(self, "update", "before", nil, update_data)
 
             local Condition = require("jade.query.condition")
             local where = Condition.new("id", "=", id, self._table)
@@ -745,6 +764,7 @@ function Entity:update(id_or_options, data)
 
             Callbacks.run(self, "after_update", instance, update_data)
             Callbacks.run(self, "after_save", instance, update_data)
+            firePluginCRUD(self, "update", "after", instance, update_data)
 
             -- Fire built-in event
             Events.fire(self, "updated", { instance = instance, data = update_data })
@@ -776,6 +796,7 @@ function Entity:delete(id_or_options)
 
         -- Run callbacks
         Callbacks.run(self, "before_delete", nil, { id = id })
+        firePluginCRUD(self, "delete", "before", nil, { id = id })
 
         local Condition = require("jade.query.condition")
         local where = Condition.new("id", "=", id, self._table)
@@ -785,6 +806,7 @@ function Entity:delete(id_or_options)
         local instance = Instance.new(self, row)
 
         Callbacks.run(self, "after_delete", instance, { id = id })
+        firePluginCRUD(self, "delete", "after", instance, { id = id })
 
         -- Fire built-in event
         Events.fire(self, "deleted", { instance = instance, data = { id = id } })

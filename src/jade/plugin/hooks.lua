@@ -197,7 +197,8 @@ end
 --- @param instance table|nil The entity instance being modified
 --- @param data table|nil Data being operated on
 function M.fireCRUD(entity, method, event, instance, data)
-    local hook_type = event .. method -- e.g., "beforeCreate", "afterUpdate"
+    local capitalized = method:sub(1, 1):upper() .. method:sub(2)
+    local hook_type = event .. capitalized -- e.g. beforeCreate
     local context_ = {
         entity = entity,
         method = method,
