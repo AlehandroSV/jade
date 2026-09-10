@@ -17,6 +17,7 @@ local Validations = require("jade.entity.validations")
 local Callbacks = require("jade.entity.callbacks")
 local Events = require("jade.entity.events")
 local Security = require("jade.security")
+local JadeErrors = require("jade.errors")
 
 local Entity = {}
 Entity.__index = function(self, key)
@@ -342,7 +343,7 @@ end
 function Entity:findFirstOrThrow(options)
     local result = self:findFirst(options)
     if not result then
-        error("No " .. self._table .. " found with given conditions")
+        JadeErrors.raise(JadeErrors.NO_ROWS_FOUND, { table = self._table }, 2)
     end
     return result
 end
@@ -363,7 +364,7 @@ end
 function Entity:findUniqueOrThrow(options)
     local result = self:findUnique(options)
     if not result then
-        error("No " .. self._table .. " found with given unique conditions")
+        JadeErrors.raise(JadeErrors.NO_ROWS_FOUND, { table = self._table }, 2)
     end
     return result
 end
@@ -622,9 +623,11 @@ function Entity:create(data)
     Security.validateInput(columns_data, self._columns)
 
     -- Run validations on columns only
-    local errors = self:validate(columns_data)
-    if errors then
-        error("Validation failed: " .. table.concat(errors, ", "))
+    local validation_errors = self:validate(columns_data)
+    if validation_errors then
+        JadeErrors.raise(JadeErrors.DATA_VALIDATION_ERROR, {
+            error = table.concat(validation_errors, ", "),
+        }, 2)
     end
 
     -- Run around callbacks
@@ -700,9 +703,11 @@ function Entity:update(id_or_options, data)
         update_data.id = id
 
         -- Run validations
-        local errors = self:validate(update_data)
-        if errors then
-            error("Validation failed: " .. table.concat(errors, ", "))
+        local validation_errors = self:validate(update_data)
+        if validation_errors then
+            JadeErrors.raise(JadeErrors.DATA_VALIDATION_ERROR, {
+                error = table.concat(validation_errors, ", "),
+            }, 2)
         end
 
         -- Run around callbacks

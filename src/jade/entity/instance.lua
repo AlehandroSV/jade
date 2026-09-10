@@ -4,6 +4,7 @@
 --- @class Jade.Instance : table
 --- @field _entity Jade.Entity The entity this instance belongs to
 --- @field _data table<string, any> Raw record data
+local JadeErrors = require("jade.errors")
 local Instance = {}
 Instance.__index = function(self, key)
     local method = rawget(Instance, key)
@@ -36,7 +37,7 @@ end
 function Instance:update(data)
     local id = self._data.id
     if not id then
-        error("Cannot update instance without id")
+        JadeErrors.raise(JadeErrors.MISSING_REQUIRED_FIELD, { field = "id" }, 2)
     end
 
     -- Pass version from instance data for optimistic locking
@@ -71,7 +72,7 @@ end
 function Instance:delete()
     local id = self._data.id
     if not id then
-        error("Cannot delete instance without id")
+        JadeErrors.raise(JadeErrors.MISSING_REQUIRED_FIELD, { field = "id" }, 2)
     end
     return self._entity:delete(id)
 end
@@ -93,7 +94,7 @@ end
 function Instance:refresh()
     local id = self._data.id
     if not id then
-        error("Cannot refresh instance without id")
+        JadeErrors.raise(JadeErrors.MISSING_REQUIRED_FIELD, { field = "id" }, 2)
     end
     local fresh = self._entity:find(id)
     if fresh then

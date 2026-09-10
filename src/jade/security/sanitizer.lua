@@ -123,14 +123,15 @@ end
 -- @param identifier string The identifier to validate
 -- @return string The validated identifier
 function M.escapeIdentifier(identifier)
+    local errors = require("jade.errors")
     if type(identifier) ~= "string" then
-        error("Identifier must be a string")
+        errors.raise(errors.INVALID_IDENTIFIER, { identifier = tostring(identifier) }, 2)
     end
 
     -- Strict whitelist: only alphanumeric characters and underscores
     -- Must start with a letter or underscore
     if not identifier:match("^[%a_][%w_]*$") then
-        error("Invalid identifier: " .. identifier)
+        errors.raise(errors.INVALID_IDENTIFIER, { identifier = identifier }, 2)
     end
 
     return identifier

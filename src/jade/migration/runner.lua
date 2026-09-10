@@ -1,4 +1,5 @@
 local M = {}
+local errors = require("jade.errors")
 
 --- Run a single migration within a transaction.
 -- Automatically commits on success, rolls back on error.
@@ -17,7 +18,9 @@ function M.run(driver, migration_module, action)
 
     local fn = migration_module[action]
     if not fn then
-        error("Migration does not have a '" .. action .. "' function")
+        errors.raise(errors.MIGRATION_FILE_INVALID, {
+            error = "Migration does not have a '" .. action .. "' function",
+        }, 2)
     end
 
     -- Execute the migration within a transaction for atomicity
@@ -40,7 +43,13 @@ function M.runAll(driver, migrations, action)
         }
 
         if not ok then
-            error("Migration failed: " .. migration.name .. "\n" .. tostring(err))
+            if type(err) == "table" and err.code then
+                error(err, 0)
+            end
+            errors.raise(errors.MIGRATION_FAILED, {
+                name = migration.name,
+                error = tostring(err),
+            }, 2)
         end
     end
 

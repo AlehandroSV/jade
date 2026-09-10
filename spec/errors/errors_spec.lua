@@ -92,4 +92,55 @@ describe("Error System", function()
             assert.is_truth(msg:match("Unknown error"))
         end)
     end)
+
+    describe("raise", function()
+        it("raises a typed error with code", function()
+            local ok, err = pcall(function()
+                errors.raise(errors.NO_ROWS_FOUND, { table = "users" })
+            end)
+            assert.is_false(ok)
+            assert.are.equal("table", type(err))
+            assert.are.equal("J1008", err.code)
+            assert.is_truth(err.message:match("users"))
+        end)
+
+        it("aliases unique violation to J1016", function()
+            assert.are.equal(errors.UNIQUE_CONSTRAINT_VIOLATION, errors.UNIQUE_VIOLATION)
+            assert.are.equal("J1016", errors.UNIQUE_VIOLATION)
+        end)
+
+        it("aliases row not found to J1008", function()
+            assert.are.equal(errors.NO_ROWS_FOUND, errors.ROW_NOT_FOUND)
+        end)
+    end)
+
+    describe("classifyDriverError", function()
+        it("maps auth failures", function()
+            assert.are.equal(errors.AUTHENTICATION_FAILED,
+                errors.classifyDriverError("password authentication failed for user"))
+        end)
+
+        it("maps unique violations", function()
+            assert.are.equal(errors.UNIQUE_CONSTRAINT_VIOLATION,
+                errors.classifyDriverError("UNIQUE constraint failed: users.email"))
+        end)
+
+        it("maps foreign key violations", function()
+            assert.are.equal(errors.FOREIGN_KEY_VIOLATION,
+                errors.classifyDriverError("FOREIGN KEY constraint failed"))
+        end)
+
+        it("falls back to raw query failed", function()
+            assert.are.equal(errors.RAW_QUERY_FAILED,
+                errors.classifyDriverError("something unexpected"))
+        end)
+    end)
+
+    describe("build", function()
+        it("builds ConnectionError for J0xxx", function()
+            local err = errors.build(errors.CONNECTION_REFUSED, { host = "db", port = 5432 })
+            assert.are.equal("J0002", err.code)
+            assert.is_truth(err.message:match("db"))
+        end)
+    end)
 end)
