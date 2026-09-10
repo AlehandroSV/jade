@@ -5,12 +5,13 @@ source = {
     dir = "jade-orm-core"
 }
 description = {
-    summary = "A modern ORM for Lua",
+    summary = "Jade — ORM/Data Mapper for Lua 5.1+",
     detailed = [[
-        Jade is a modern ORM/Data Mapper for Lua.
+        Jade is an ORM/Data Mapper for Lua 5.1+.
+        Schema .jade, transparent SQL, typed errors J####.
         Features: declarative schema, automatic migrations,
         query builder, relations, pagination, transactions,
-        soft delete, and a typed error catalog (J####).
+        soft delete, and a typed error catalog.
     ]],
     homepage = "https://github.com/Jade-ORM/jade-orm-core",
     license = "MIT"
