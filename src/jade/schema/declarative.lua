@@ -1,5 +1,4 @@
 local Inflection = require("jade.util.inflection")
-local Schema = require("jade.schema")
 local Entity = require("jade.entity")
 
 local Declarative = {}
@@ -290,25 +289,6 @@ function Declarative.generateEntity(model)
     end
 
     return entity
-end
-
--- Generate migration from parsed schema
-function Declarative.generateMigration(schema, migration_name)
-    local migration = {
-        name = migration_name or ("create_" .. table.concat(Declarative.getTableNames(schema), "_and_")),
-        up = function(driver)
-            for model_name, model in pairs(schema.models) do
-                Declarative.createTableFromModel(driver, model)
-            end
-        end,
-        down = function(driver)
-            for model_name, model in pairs(schema.models) do
-                Schema.dropTable(driver, model.tableName)
-            end
-        end,
-    }
-
-    return migration
 end
 
 -- Get table names from schema
@@ -698,10 +678,12 @@ function Declarative.generateAllModels(schema)
 end
 
 --- Generate a migration file from parsed schema
+--- Emits runnable `jade.createTable(name, function(t) ... end)` using Table:column API.
 --- @param schema table Parsed schema with models
 --- @param name string Migration name
 --- @return string Lua migration file content
 function Declarative.generateMigration(schema, name)
+    local Codegen = require("jade.migration.codegen")
     local lines = {}
 
     lines[#lines + 1] = string.format('-- Migration: %s', name or "create_tables")
@@ -713,49 +695,36 @@ function Declarative.generateMigration(schema, name)
     lines[#lines + 1] = ''
     lines[#lines + 1] = 'function M.up()'
 
-    for model_name, model in pairs(schema.models) do
-        lines[#lines + 1] = string.format('    jade.createTable("%s", function(t)', model.tableName)
+    -- Deterministic table order for stable migration files
+    local model_names = {}
+    for model_name in pairs(schema.models) do
+        model_names[#model_names + 1] = model_name
+    end
+    table.sort(model_names, function(a, b)
+        return schema.models[a].tableName < schema.models[b].tableName
+    end)
 
-        for field_name, field in pairs(model.fields) do
-            local col_type = field.type or "string"
-            local length = field.length
-            local modifiers = {}
-
-            if field.primary_key then
-                table.insert(modifiers, ":primaryKey()")
-            end
-            if field.not_null then
-                table.insert(modifiers, ":notNull()")
-            end
-            if field.unique then
-                table.insert(modifiers, ":unique()")
-            end
-            if field.default ~= nil then
-                if type(field.default) == "string" then
-                    table.insert(modifiers, string.format(':default("%s")', field.default))
-                else
-                    table.insert(modifiers, string.format(':default(%s)', tostring(field.default)))
-                end
-            end
-            if field.default_now then
-                table.insert(modifiers, ":defaultNow()")
-            end
-
-            local col_call = string.format("t:%s", col_type)
-            if length then
-                col_call = string.format("t:%s(%d)", col_type, length)
-            end
-            lines[#lines + 1] = string.format('        %s("%s")%s', col_call, field_name, table.concat(modifiers))
+    for _, model_name in ipairs(model_names) do
+        local model = schema.models[model_name]
+        local columns = {}
+        for _, field_name in ipairs(Codegen.sortedColumnNames(model.fields)) do
+            local field = model.fields[field_name]
+            local opts, type_name = Codegen.fieldToOpts(field)
+            columns[#columns + 1] = {
+                name = field_name,
+                type = type_name,
+                opts = opts,
+            }
         end
-
-        lines[#lines + 1] = '    end)'
+        lines[#lines + 1] = Codegen.emitCreateTable(model.tableName, columns, "jade", "    ")
     end
 
     lines[#lines + 1] = 'end'
     lines[#lines + 1] = ''
     lines[#lines + 1] = 'function M.down()'
 
-    for model_name, model in pairs(schema.models) do
+    for _, model_name in ipairs(model_names) do
+        local model = schema.models[model_name]
         lines[#lines + 1] = string.format('    jade.dropTable("%s")', model.tableName)
     end
 

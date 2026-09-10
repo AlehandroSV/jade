@@ -220,4 +220,125 @@ describe("Declarative Schema", function()
             assert.is_not_nil(schema.models.Post)
         end)
     end)
+
+    describe("generateMigration", function()
+        local load_chunk = loadstring or load
+
+        local function mock_driver()
+            local executed = {}
+            local driver = {
+                executed = executed,
+                mapType = function(_, column)
+                    local map = {
+                        string = "TEXT",
+                        text = "TEXT",
+                        integer = "INTEGER",
+                        bigint = "INTEGER",
+                        float = "REAL",
+                        decimal = "REAL",
+                        boolean = "INTEGER",
+                        timestamp = "TEXT",
+                        date = "TEXT",
+                        uuid = "TEXT",
+                        json = "TEXT",
+                    }
+                    return map[column.type] or "TEXT"
+                end,
+                supportsAutoIncrement = function()
+                    return true
+                end,
+                autoIncrementKeyword = function()
+                    return "AUTOINCREMENT"
+                end,
+                dropTableCascade = function()
+                    return false
+                end,
+                execute = function(_, sql, bindings)
+                    executed[#executed + 1] = { sql = sql, bindings = bindings }
+                    return {}
+                end,
+            }
+            return driver
+        end
+
+        it("returns Lua source (string), not a runtime migration object", function()
+            local schema = Declarative.parse({
+                User = { name = "string" },
+            })
+            local code = Declarative.generateMigration(schema, "create_users")
+            assert.are.equal("string", type(code))
+        end)
+
+        it("emits function-form createTable using t:column", function()
+            local schema = Declarative.parse({
+                User = {
+                    name = "string(120)",
+                    email = { type = "string", length = 255, unique = true, not_null = true },
+                },
+            })
+            local code = Declarative.generateMigration(schema, "create_users")
+            assert.is_truth(code:find("function M.up()", 1, true))
+            assert.is_truth(code:find("function M.down()", 1, true))
+            assert.is_truth(code:find("jade.createTable", 1, true))
+            assert.is_truth(code:find("function(t)", 1, true))
+            assert.is_truth(code:find('t:column("id"', 1, true))
+            assert.is_truth(code:find('t:column("name"', 1, true))
+            assert.is_truth(code:find("primary_key", 1, true))
+            -- invalid Table fluent type methods
+            assert.is_nil(code:find("t:integer", 1, true))
+            assert.is_nil(code:find("t:string", 1, true))
+            assert.is_nil(code:find('createTable("users", {', 1, true))
+        end)
+
+        it("generated migration compiles and runs against Schema.createTable", function()
+            local Schema = require("jade.schema")
+            local schema = Declarative.parse({
+                User = {
+                    name = "string(120)",
+                    email = { type = "string", length = 255, unique = true, not_null = true },
+                    timestamps = false,
+                },
+            })
+            local code = Declarative.generateMigration(schema, "create_users")
+            local chunk, err = load_chunk(code)
+            assert.is_not_nil(chunk, "generated migration must compile: " .. tostring(err))
+
+            local calls = {}
+            local previous = package.loaded["jade"]
+            package.loaded["jade"] = {
+                createTable = function(name, fn)
+                    calls[#calls + 1] = { name = name, fn = fn }
+                end,
+                dropTable = function(name)
+                    calls[#calls + 1] = { name = name, drop = true }
+                end,
+            }
+            -- chunk() runs `local jade = require("jade")` — mock must be in place
+            local ok_load, mod_or_err = pcall(chunk)
+            local ok_up, run_err = true, nil
+            local mod = mod_or_err
+            if ok_load and type(mod) == "table" and type(mod.up) == "function" then
+                ok_up, run_err = pcall(mod.up)
+            else
+                ok_up = false
+                run_err = mod_or_err
+            end
+            package.loaded["jade"] = previous
+            assert.is_true(ok_load, "migration chunk must return module: " .. tostring(mod_or_err))
+            assert.is_function(mod.up)
+            assert.is_function(mod.down)
+            assert.is_true(ok_up, "M.up() must not error: " .. tostring(run_err))
+            assert.is_true(#calls >= 1)
+            assert.is_function(calls[1].fn)
+
+            local driver = mock_driver()
+            local created, create_err = pcall(function()
+                Schema.createTable(driver, calls[1].name, calls[1].fn)
+            end)
+            assert.is_true(created, "Schema.createTable must accept generated fn: " .. tostring(create_err))
+            assert.is_truth(driver.executed[1].sql:match("CREATE TABLE"))
+            assert.is_truth(driver.executed[1].sql:match('"name"'))
+            assert.is_truth(driver.executed[1].sql:match('"email"'))
+        end)
+    end)
 end)

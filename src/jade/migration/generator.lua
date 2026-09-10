@@ -1,37 +1,19 @@
+local Codegen = require("jade.migration.codegen")
+
 local M = {}
 
 function M.generateCreateTable(table_name, columns)
-    local lines = {}
-    lines[#lines + 1] = '    Jade.createTable("' .. table_name .. '", {'
-
-    for name, col in pairs(columns) do
-        local parts = {}
-        parts[#parts + 1] = '        ' .. name .. ' = Jade.' .. col.type .. '()'
-
-        if col._primary_key then
-            parts[#parts + 1] = ':primaryKey()'
-        end
-        if col._unique then
-            parts[#parts + 1] = ':unique()'
-        end
-        if not col._nullable then
-            parts[#parts + 1] = ':notNull()'
-        end
-        if col._default ~= nil and col._default ~= "CURRENT_TIMESTAMP" then
-            parts[#parts + 1] = ':default(' .. tostring(col._default) .. ')'
-        elseif col._default == "CURRENT_TIMESTAMP" then
-            parts[#parts + 1] = ':defaultNow()'
-        end
-        if col.length and col.type == "string" then
-            -- Length is already in the constructor
-        end
-
-        lines[#lines + 1] = table.concat(parts)
+    local ordered = {}
+    for _, name in ipairs(Codegen.sortedColumnNames(columns)) do
+        local col = columns[name]
+        local opts, type_name = Codegen.columnToOpts(col)
+        ordered[#ordered + 1] = {
+            name = name,
+            type = type_name,
+            opts = opts,
+        }
     end
-
-    lines[#lines + 1] = "    })"
-
-    return table.concat(lines, "\n")
+    return Codegen.emitCreateTable(table_name, ordered, "Jade", "    ")
 end
 
 function M.generateDropTable(table_name)
@@ -39,19 +21,19 @@ function M.generateDropTable(table_name)
 end
 
 function M.generateAddColumn(table_name, column_name, column)
-    local type_str = column.type
-    if column.length then
-        type_str = type_str .. "(" .. column.length .. ")"
+    local opts, type_name = Codegen.columnToOpts(column)
+    local assignments = Codegen.optionAssignments(opts)
+    -- length already covered by optionAssignments; drop precision/scale noise for ALTER
+    if #assignments == 0 then
+        return string.format('    Jade.addColumn("%s", "%s", "%s")', table_name, column_name, type_name)
     end
-
-    local parts = {}
-    parts[#parts + 1] = '    Jade.addColumn("' .. table_name .. '", "' .. column_name .. '", Jade.' .. column.type
-    if column.length then
-        parts[#parts + 1] = "(" .. column.length .. ")"
-    end
-    parts[#parts + 1] = '())'
-
-    return table.concat(parts)
+    return string.format(
+        '    Jade.addColumn("%s", "%s", "%s", { %s })',
+        table_name,
+        column_name,
+        type_name,
+        table.concat(assignments, ", ")
+    )
 end
 
 function M.generateDropColumn(table_name, column_name)
