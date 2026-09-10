@@ -1,44 +1,60 @@
 --- Plugin Loader — discovers and loads plugins from configuration.
 ---
---- This module bridges `jade.config.lua` with the plugin system.
---- It supports three loading strategies:
+--- Supports three sources:
+--- 1. **builtin** — require("jade.plugin.X") via name registry
+--- 2. **external** — filesystem path (dofile)
+--- 3. **luarocks** — convention jade-plugin-{name}
 ---
---- 1. **Builtin** (pre-registered in M._builtins): loaded via require("jade.plugin.X")
---- 2. **Luarocks** (from PATH): loaded by resolving luarocks package names like "luarocks://jade-plugin-soft-delete"
---- 3. **External** (filesystem): loaded from a user-specified directory via require(load_path, relative)
----
---- Config format:
+--- Config format (options are top-level OR nested under `options`):
 ---   plugins = {
----       -- Simple: just name (uses builtin registration)
----       { name = "soft-delete" },
----       { name = "cache",     ttl = 300 },
----       { name = "audit",     ignore = {"password"} },
----       -- With explicit source
----       { name = "my-feature", source = "external", path = "./plugins" },
----       -- With luarocks
----       { name = "community-stats", source = "luarocks", spec = "luarocks://jade-plugin-community-stats" },
+---       { name = "cache", ttl = 300, max_size = 2000 },
+---       { name = "timestamps" },
+---       { name = "my-feature", source = "external", path = "./plugins", foo = 1 },
 ---   }
 
 local M = {}
 
--- Builtin plugin registry: maps short names to their module paths
 M._builtins = {
-    ["soft-delete"]    = "jade.plugin.soft_delete",
-    ["callbacks"]      = "jade.plugin.callbacks",
-    ["optimistic-lock"]= "jade.plugin.optimistic_lock",
-    ["audit"]          = "jade.plugin.audit",
-    ["encryption"]     = "jade.plugin.encryption",
-    ["cache"]          = "jade.plugin.cache",
+    ["soft-delete"]     = "jade.plugin.soft_delete",
+    ["callbacks"]       = "jade.plugin.callbacks",
+    ["optimistic-lock"] = "jade.plugin.optimistic_lock",
+    ["audit"]           = "jade.plugin.audit",
+    ["encryption"]      = "jade.plugin.encryption",
+    ["cache"]           = "jade.plugin.cache",
+    ["timestamps"]      = "jade.plugin.timestamps",
+    ["tenant"]          = "jade.plugin.tenant",
+    ["sql-log"]         = "jade.plugin.sql_log",
 }
 
----------------------------------------------------------------------------
--- Loading
----------------------------------------------------------------------------
+local RESERVED_KEYS = {
+    name = true,
+    source = true,
+    path = true,
+    spec = true,
+    options = true,
+}
 
---- Load all plugins configured in a Jade config table.
---- @param jade table The Jade instance (has .use())
---- @param plugins_config table Array of plugin config entries
---- @return table results Map of { [name] = { ok = bool, error? } }
+--- Merge plugin config into a plain options table.
+--- Accepts either nested `options = { ... }` or top-level keys (except reserved).
+--- @param cfg table
+--- @return table options
+function M.extractOptions(cfg)
+    if type(cfg.options) == "table" then
+        return cfg.options
+    end
+    local opts = {}
+    for k, v in pairs(cfg) do
+        if not RESERVED_KEYS[k] then
+            opts[k] = v
+        end
+    end
+    return opts
+end
+
+--- Load all plugins from config.
+--- @param jade table Jade instance (has .use)
+--- @param plugins_config table|nil
+--- @return table results Map name -> { ok, error? }
 function M.loadAll(jade, plugins_config)
     if not plugins_config or type(plugins_config) ~= "table" then
         return {}
@@ -46,36 +62,31 @@ function M.loadAll(jade, plugins_config)
 
     local results = {}
 
-    for idx_, cfg_ in ipairs(plugins_config) do
-        local name_ = cfg_.name
-        
-        -- Helper lambda-style processing
-        local function skip_if_missing()
-            if name_ == nil or name_ == "" then
-                results[idx_] = { ok = false, error = "plugin config missing 'name'" }
-                return true
-            end
-            
-            local plugin_module = M.find(cfg_)
+    for _, cfg in ipairs(plugins_config) do
+        local name = cfg.name
+        if not name or name == "" then
+            results["#" .. tostring(_)] = { ok = false, error = "plugin config missing 'name'" }
+        else
+            local plugin_module, find_err = M.find(cfg)
             if not plugin_module then
-                results[name_] = { ok = false, error = "plugin '" .. name_ .. "' could not be found" }
-                return true
+                results[name] = {
+                    ok = false,
+                    error = find_err or ("plugin '" .. name .. "' could not be found"),
+                }
+            else
+                local opts = M.extractOptions(cfg)
+                local ok, err = jade.use(plugin_module, opts)
+                results[name] = { ok = ok, error = err }
             end
-            
-            local ok, err = jade.use(plugin_module, cfg_.options or {})
-            results[name_] = { ok = ok, error = err }
-            return false
         end
-        
-        skip_if_missing()
     end
 
     return results
 end
 
---- Find and resolve a plugin module from its config entry.
---- @param cfg table { name, source?, path?, spec? }
---- @return module|nil
+--- Resolve a plugin module from config entry.
+--- @param cfg table
+--- @return table|nil module
 --- @return string|nil error
 function M.find(cfg)
     local name = cfg.name
@@ -86,15 +97,18 @@ function M.find(cfg)
         if not module_path then
             return nil, "'" .. name .. "' is not registered as a builtin plugin"
         end
-        return require(module_path)
+        local ok, mod = pcall(require, module_path)
+        if not ok then
+            return nil, "failed to require builtin plugin '" .. name .. "': " .. tostring(mod)
+        end
+        return mod
     end
 
     if source == "external" then
-        local load_path = cfg.path
-        if not load_path then
+        if not cfg.path then
             return nil, "external plugin '" .. name .. "' requires 'path' config"
         end
-        return M._loadExternal(name, load_path)
+        return M._loadExternal(name, cfg.path)
     end
 
     if source == "luarocks" then
@@ -105,50 +119,58 @@ function M.find(cfg)
     return nil, "unknown plugin source: '" .. source .. "'"
 end
 
---- Resolve a plugin name to a luarocks rockspec.
---- Convention: jade-plugin-{name} → jade-plugin-name-X.Y.Z-1.rockspec
---- @param name string
---- @return string rockspec
 function M._rockspec(name)
     return "jade-plugin-" .. name
 end
 
---- Load an external plugin from filesystem.
---- Tries multiple file patterns for robustness.
+--- Load external plugin via dofile (filesystem), not package.path require.
 --- @param name string
---- @param load_path string
---- @return module|nil
+--- @param load_path string Directory or file path
+--- @return table|nil
+--- @return string|nil error
 function M._loadExternal(name, load_path)
     local candidates = {
+        load_path,
         load_path .. "/" .. name .. ".lua",
         load_path .. "/init.lua",
         load_path .. "/" .. name .. "/init.lua",
     }
 
+    local last_err
     for _, path in ipairs(candidates) do
-        local loaded, err = pcall(require, path)
-        if loaded then return loaded end
-        -- Clear lua's module cache since we don't want it cached
-        package.loaded[path] = nil
+        local chunk, err = loadfile(path)
+        if chunk then
+            local ok, mod = pcall(chunk)
+            if ok and type(mod) == "table" then
+                return mod
+            end
+            if ok then
+                last_err = "external plugin '" .. path .. "' did not return a table"
+            else
+                last_err = tostring(mod)
+            end
+        else
+            last_err = err
+        end
     end
 
-    return nil
+    return nil, "external plugin '" .. name .. "' not found at '" .. load_path .. "': " .. tostring(last_err)
 end
 
---- Attempt to load a plugin from a luarock.
---- In the future this could auto-install the rock; for now it tries require().
---- @param spec string The luarock spec (e.g. "luarocks://jade-plugin-cache")
+--- Try require for a luarocks-installed module.
+--- @param spec string
 --- @param cfg table
---- @return module|nil
+--- @return table|nil
+--- @return string|nil error
 function M._loadLuarocks(spec, cfg)
-    -- Strip "luarocks://" prefix and try to require
     local rock_name = spec:gsub("^luarocks://", "")
-    local module_path = "jade.plugin." .. rock_name:gsub("^jade%-plugin%-", "")
+    local module_path = "jade.plugin." .. rock_name:gsub("^jade%-plugin%-", ""):gsub("%-", "_")
 
-    local loaded, err = pcall(require, module_path)
-    if loaded then return loaded end
-
-    return nil
+    local ok, mod = pcall(require, module_path)
+    if ok and type(mod) == "table" then
+        return mod
+    end
+    return nil, "luarocks plugin '" .. rock_name .. "' not installed (require failed)"
 end
 
 return M
