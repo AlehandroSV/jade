@@ -94,7 +94,14 @@ describe("Migration API", function()
             local saved_file = migration.file
             local saved_runner = migration.runner
             migration.file = { load = function(path) return { name = path:match("([^/]+)$") } end }
-            migration.runner = { run = function(driver, migration, direction) return true end }
+            migration.runner = {
+                run = function(driver, migration, direction, run_opts)
+                    if run_opts and run_opts.after then
+                        run_opts.after(driver)
+                    end
+                    return true
+                end,
+            }
 
             local driver = mock_driver()
             tracker.recordMigration(driver, "001_create_users")
@@ -114,7 +121,14 @@ describe("Migration API", function()
             local saved_file = migration.file
             local saved_runner = migration.runner
             migration.file = { load = function(path) return { name = path:match("([^/]+)$") } end }
-            migration.runner = { run = function(driver, migration, direction) return true end }
+            migration.runner = {
+                run = function(driver, migration, direction, run_opts)
+                    if run_opts and run_opts.after then
+                        run_opts.after(driver)
+                    end
+                    return true
+                end,
+            }
 
             local driver = mock_driver()
             tracker.recordMigration(driver, "001_create_users")

@@ -189,6 +189,7 @@ local test_files = {
     "driver/mariadb_spec.lua",
     "driver/openresty_spec.lua",
     "migration/tracker_spec.lua",
+    "migration/tracker_per_migration_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
     "migration/rollback_spec.lua",

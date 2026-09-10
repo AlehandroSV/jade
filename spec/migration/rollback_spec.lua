@@ -109,9 +109,12 @@ describe("Migration rollback atomicity", function()
 
         -- Mock runner module
         M.runner = {
-            run = function(driver, migration, direction)
+            run = function(driver, migration, direction, run_opts)
                 if fail_migration and migration.name == fail_migration then
                     error("Migration failed: " .. migration.name)
+                end
+                if run_opts and run_opts.after then
+                    run_opts.after(driver)
                 end
                 return true
             end,
