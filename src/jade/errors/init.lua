@@ -216,6 +216,9 @@ end
 
 --- Map a driver/native error string to a Jade error code.
 --- Best-effort heuristic for PostgreSQL/MySQL/SQLite/luasql messages.
+--- Table/column checks run before the generic "does not exist" fallback so
+--- PostgreSQL `relation "t" does not exist` / `column "c" does not exist`
+--- are not swallowed as DATABASE_NOT_FOUND (#179).
 ---@param err any Native driver error
 ---@return string code
 function M.classifyDriverError(err)
@@ -233,14 +236,37 @@ function M.classifyDriverError(err)
     if msg:find("timeout", 1, true) or msg:find("timed out", 1, true) then
         return M.CONNECTION_TIMEOUT
     end
-    if msg:find("does not exist", 1, true)
-        or msg:find("unknown database", 1, true)
-        or msg:find("no such database", 1, true) then
-        return M.DATABASE_NOT_FOUND
-    end
     if msg:find("ssl", 1, true) or msg:find("tls", 1, true) then
         return M.TLS_ERROR
     end
+
+    -- Specific table patterns (SQLite / MySQL)
+    if msg:find("no such table", 1, true)
+        or msg:find("doesn't exist", 1, true)
+        or msg:find("unknown table", 1, true) then
+        return M.TABLE_NOT_FOUND
+    end
+    -- Specific column patterns (SQLite / MySQL)
+    if msg:find("no such column", 1, true)
+        or msg:find("unknown column", 1, true) then
+        return M.COLUMN_NOT_FOUND
+    end
+
+    -- PostgreSQL-style qualified "does not exist"
+    if msg:find("does not exist", 1, true) then
+        if msg:find("column", 1, true) then
+            return M.COLUMN_NOT_FOUND
+        end
+        if msg:find("relation", 1, true) or msg:find("table", 1, true) then
+            return M.TABLE_NOT_FOUND
+        end
+        return M.DATABASE_NOT_FOUND
+    end
+    if msg:find("unknown database", 1, true)
+        or msg:find("no such database", 1, true) then
+        return M.DATABASE_NOT_FOUND
+    end
+
     if msg:find("unique", 1, true) or msg:find("duplicate", 1, true) then
         return M.UNIQUE_CONSTRAINT_VIOLATION
     end
@@ -255,12 +281,6 @@ function M.classifyDriverError(err)
     end
     if msg:find("syntax error", 1, true) then
         return M.QUERY_SYNTAX_ERROR
-    end
-    if msg:find("no such table", 1, true) or msg:find("doesn't exist", 1, true) then
-        return M.TABLE_NOT_FOUND
-    end
-    if msg:find("no such column", 1, true) or msg:find("unknown column", 1, true) then
-        return M.COLUMN_NOT_FOUND
     end
     return M.RAW_QUERY_FAILED
 end

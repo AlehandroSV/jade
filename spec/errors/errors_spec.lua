@@ -134,6 +134,56 @@ describe("Error System", function()
             assert.are.equal(errors.RAW_QUERY_FAILED,
                 errors.classifyDriverError("something unexpected"))
         end)
+
+        it("maps postgres relation does not exist to TABLE_NOT_FOUND", function()
+            assert.are.equal(errors.TABLE_NOT_FOUND,
+                errors.classifyDriverError('relation "users" does not exist'))
+        end)
+
+        it("maps postgres column does not exist to COLUMN_NOT_FOUND", function()
+            assert.are.equal(errors.COLUMN_NOT_FOUND,
+                errors.classifyDriverError('column "email" does not exist'))
+        end)
+
+        it("maps postgres column of relation to COLUMN_NOT_FOUND", function()
+            assert.are.equal(errors.COLUMN_NOT_FOUND,
+                errors.classifyDriverError('column "email" of relation "users" does not exist'))
+        end)
+
+        it("maps sqlite no such table to TABLE_NOT_FOUND", function()
+            assert.are.equal(errors.TABLE_NOT_FOUND,
+                errors.classifyDriverError("no such table: users"))
+        end)
+
+        it("maps sqlite no such column to COLUMN_NOT_FOUND", function()
+            assert.are.equal(errors.COLUMN_NOT_FOUND,
+                errors.classifyDriverError("no such column: email"))
+        end)
+
+        it("maps mysql table doesn't exist to TABLE_NOT_FOUND", function()
+            assert.are.equal(errors.TABLE_NOT_FOUND,
+                errors.classifyDriverError("Table 'app.users' doesn't exist"))
+        end)
+
+        it("maps mysql unknown column to COLUMN_NOT_FOUND", function()
+            assert.are.equal(errors.COLUMN_NOT_FOUND,
+                errors.classifyDriverError("Unknown column 'email' in 'field list'"))
+        end)
+
+        it("maps unknown database to DATABASE_NOT_FOUND", function()
+            assert.are.equal(errors.DATABASE_NOT_FOUND,
+                errors.classifyDriverError("Unknown database 'missing'"))
+        end)
+
+        it("maps database does not exist to DATABASE_NOT_FOUND", function()
+            assert.are.equal(errors.DATABASE_NOT_FOUND,
+                errors.classifyDriverError('database "missing" does not exist'))
+        end)
+
+        it("maps no such database to DATABASE_NOT_FOUND", function()
+            assert.are.equal(errors.DATABASE_NOT_FOUND,
+                errors.classifyDriverError("no such database: missing"))
+        end)
     end)
 
     describe("build", function()
