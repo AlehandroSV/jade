@@ -129,7 +129,7 @@ describe("Migration rollback atomicity", function()
         assert.is_falsy(applied["002_add_email"])
     end)
 
-    it("does not remove any trackers when first rollback fails", function()
+    it("keeps failed tracker and still removes later successful rollbacks", function()
         local driver = mock_driver()
         setup_mocks({ fail_migration = "003_add_bio" })
 
@@ -138,7 +138,7 @@ describe("Migration rollback atomicity", function()
         tracker.recordMigration(driver, "002_add_email")
         tracker.recordMigration(driver, "003_add_bio")
 
-        -- Rollback 2 - 003 (newest) will fail first
+        -- Rollback 2 - 003 (newest) will fail first; 002 still runs
         local ok, err = pcall(function()
             M.rollback(driver, 2)
         end)
@@ -147,9 +147,11 @@ describe("Migration rollback atomicity", function()
         assert.is_truthy(err:find("Rollback failed: 003_add_bio"))
 
         local applied = tracker.getAppliedMigrations(driver)
-        -- All should still be tracked since first rollback failed
+        -- 001 was outside the rollback window
         assert.is_true(applied["001_create_users"])
-        assert.is_true(applied["002_add_email"])
+        -- 002 succeeded after the failure — tracker removed
+        assert.is_falsy(applied["002_add_email"])
+        -- 003 failed — tracker remains
         assert.is_true(applied["003_add_bio"])
     end)
 end)
