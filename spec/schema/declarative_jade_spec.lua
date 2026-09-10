@@ -228,8 +228,13 @@ describe("Declarative .jade parser", function()
         end)
 
         it("loadEntities wires User.posts and Post.author", function()
-            local path = os.tmpname() .. ".jade"
+            -- os.tmpname() on Windows yields a non-writable root path (e.g. "\steg.")
+            local spec_dir = debug.getinfo(1, "S").source:sub(2):match("(.*[/\\])") or "spec/"
+            local path = spec_dir .. "_tmp_loadentities_178.jade"
             local f = io.open(path, "w")
+            if not f then
+                error("cannot write temp schema: " .. path)
+            end
             f:write(sample)
             f:close()
 
