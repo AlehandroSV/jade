@@ -1,37 +1,44 @@
 local M = {}
+local errors = require("jade.errors")
 
 -- Seed registry
 local seed_files = {}
 
 -- Validate and sanitize file path to prevent directory traversal and arbitrary file loading
-local function validatePath(path, allowedExtension)
+-- Exported as M.validatePath for testability
+function M.validatePath(path, allowedExtension)
+    local function reject()
+        errors.raise(errors.INVALID_INPUT, { details = "rejected by security policy" }, 3)
+    end
     if type(path) ~= "string" or path == "" then
-        error("Invalid path: must be a non-empty string")
+        reject()
     end
-    
+
     -- Reject paths with null bytes
-    if path:find("\0") then
-        error("Invalid path: contains null byte")
+    if path:find("\0", 1, true) then
+        reject()
     end
-    
-    -- Reject directory traversal attempts
-    if path:match("%.%.%/?") or path:match("/%.%.") then
-        error("Invalid path: directory traversal not allowed")
+
+    -- Reject directory traversal attempts (.. in any context: ../, ..\, etc.)
+    if path:find("..", 1, true) then
+        reject()
     end
-    
-    -- Reject absolute paths outside current directory context
-    -- Allow relative paths only
-    if path:match("^/") or (path:match("^%a:") and not path:match("^%a:[\\/]")) then
-        error("Invalid path: use relative paths only")
+
+    -- Reject absolute paths: Unix /, Windows drive (C: or C:\), UNC \\
+    if path:match("^/") or path:match("^%a:") or path:match("^\\\\") then
+        reject()
     end
-    
-    -- Validate extension
+
+    -- Validate extension (allowedExtension must be alphanumeric)
     if allowedExtension and not path:match("%." .. allowedExtension .. "$") then
-        error("Invalid path: must have ." .. allowedExtension .. " extension")
+        reject()
     end
-    
+
     return true
 end
+
+-- Local alias for internal call sites
+local validatePath = M.validatePath
 
 -- Register a seed file
 function M.register(name, path)
@@ -57,7 +64,9 @@ function M.execute(driver, seed_path)
     validatePath(seed_path, "lua")
     local loader, err = loadfile(seed_path)
     if not loader then
-        error("Failed to load seed file: " .. tostring(err))
+        errors.raise(errors.CONFIG_INVALID, {
+            details = "Failed to load seed file: " .. tostring(err),
+        }, 2)
     end
 
     local seed_data = loader()

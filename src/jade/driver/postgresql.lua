@@ -2,6 +2,7 @@ local Driver = require("jade.driver.base")
 local Pool = require("jade.driver.pool")
 local Quoting = require("jade.util.quoting")
 local Json = require("jade.query.json")
+local errors = require("jade.errors")
 
 local function get_pgmoon()
     return require("pgmoon")
@@ -78,7 +79,15 @@ function PostgreSQL:_ensureConnected()
         end
         local ok, err = pg:connect()
         if not ok then
-            error("Failed to connect to PostgreSQL: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                host = self._config.host,
+                port = self._config.port,
+                user = self._config.user,
+                database = self._config.database,
+                message = tostring(err),
+                error = tostring(err),
+                details = tostring(err),
+            }, 2)
         end
         return pg
     end
@@ -119,7 +128,10 @@ function PostgreSQL:setEncryptionKey(conn)
         local sql = "SELECT set_config('jade.encryption_key', $1, true)"
         local res, err = conn:query(sql, key)
         if not res then
-            error("Failed to set encryption key session variable: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+            }, 2)
         end
     end
 end
@@ -130,7 +142,10 @@ function PostgreSQL:setQueryTimeout(timeout_ms)
     local sql = "SET statement_timeout = " .. tostring(timeout_ms)
     local res, err = self._conn:query(sql)
     if not res then
-        error("Failed to set query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -140,7 +155,10 @@ function PostgreSQL:clearQueryTimeout()
     local sql = "SET statement_timeout = 0"
     local res, err = self._conn:query(sql)
     if not res then
-        error("Failed to clear query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -162,7 +180,15 @@ function PostgreSQL:getConnection()
     end
     local ok, err = pg:connect()
     if not ok then
-        error("Failed to connect to PostgreSQL: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            host = self._config.host,
+            port = self._config.port,
+            user = self._config.user,
+            database = self._config.database,
+            message = tostring(err),
+            error = tostring(err),
+            details = tostring(err),
+        }, 2)
     end
     -- Set encryption key for new connection
     self:setEncryptionKey(pg)
@@ -172,21 +198,21 @@ end
 function PostgreSQL:beginTransaction(conn)
     local res, err = conn:query("BEGIN")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function PostgreSQL:commitTransaction(conn)
     local res, err = conn:query("COMMIT")
     if not res then
-        error("Failed to commit transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function PostgreSQL:rollbackTransaction(conn)
     local res, err = conn:query("ROLLBACK")
     if not res then
-        error("Failed to rollback transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
@@ -194,13 +220,21 @@ function PostgreSQL:executeWithConnection(conn, sql, bindings)
     if bindings and #bindings > 0 then
         local res, err = conn:query(sql, table.unpack(bindings))
         if not res then
-            error("Query failed: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+                sql = sql,
+            }, 2)
         end
         return res
     else
         local res, err = conn:query(sql)
         if not res then
-            error("Query failed: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+                sql = sql,
+            }, 2)
         end
         return res
     end
@@ -217,19 +251,35 @@ function PostgreSQL:execute(sql, bindings)
     if bindings and #bindings > 0 then
         local res, err = self._conn:query(sql, table.unpack(bindings))
         if not res then
-            error("Query failed: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+                sql = sql,
+            }, 2)
         end
         return res
     else
         local res, err = self._conn:query(sql)
         if not res then
-            error("Query failed: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+                sql = sql,
+            }, 2)
         end
         return res
     end
 end
 
 function PostgreSQL:mapType(column_type)
+    -- Auto-increment integer PKs map to SERIAL (type, not a PRIMARY KEY suffix).
+    if column_type.type == "integer"
+        and column_type._primary_key
+        and column_type._auto_increment
+    then
+        return "SERIAL"
+    end
+
     local map = {
         string = "VARCHAR(" .. (column_type.length or 255) .. ")",
         text = "TEXT",
@@ -468,7 +518,9 @@ end
 
 function PostgreSQL:generateBulkInsert(table_name, rows, entity)
     if #rows == 0 then
-        error("Cannot bulk insert zero rows")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Cannot bulk insert zero rows",
+        }, 2)
     end
 
     local columns = {}
@@ -673,17 +725,22 @@ end
 
 --- Execute a function within a database transaction.
 -- Automatically commits on success, rolls back on error.
--- Uses the shared connection to ensure all operations are within the same transaction.
--- PostgreSQL supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
+-- With a connection pool, the entire fn is bound to one leased connection so
+-- nested driver:execute calls stay atomic. Without a pool, uses the shared
+-- connection. PostgreSQL supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
 -- @param fn function The function to execute within the transaction
 -- @return boolean true if the transaction was committed successfully
 function PostgreSQL:transaction(fn)
+    if self._pool then
+        return self._pool:transaction(fn)
+    end
+
     self:_ensureConnected()
 
     local conn = self._conn
     local res, err = conn:query("BEGIN")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 
     local ok, fn_err = pcall(fn)
@@ -691,7 +748,7 @@ function PostgreSQL:transaction(fn)
     if ok then
         local commit_res, commit_err = conn:query("COMMIT")
         if not commit_res then
-            error("Failed to commit transaction: " .. tostring(commit_err))
+            errors.raise(errors.TRANSACTION_FAILED, { error = tostring(commit_err) }, 2)
         end
         return true
     else
@@ -699,7 +756,9 @@ function PostgreSQL:transaction(fn)
         if not rollback_res then
             -- Connection may be in undefined state after failed rollback
             self._conn = nil
-            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+            errors.raise(errors.TRANSACTION_FAILED, {
+                error = tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err),
+            }, 2)
         end
         -- Re-raise original error preserving context
         error(fn_err, 2)

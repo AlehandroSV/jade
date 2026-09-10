@@ -5,6 +5,7 @@ local tracker = require("jade.migration.tracker")
 local runner = require("jade.migration.runner")
 local diff = require("jade.migration.diff")
 local generator = require("jade.migration.generator")
+local errors = require("jade.errors")
 
 --- @class Jade.MigrationModule
 --- @field tracker Jade.MigrationTracker Migration tracking module
@@ -49,34 +50,32 @@ function M.migrate(driver)
         return {}
     end
 
-    -- Run pending migrations
+    -- Run pending migrations; each name is persisted in the tracker
+    -- inside that migration's own transaction so a mid-batch crash
+    -- cannot desync tracker vs applied DDL (#176)
     local results = {}
-    local applied_names = {}
     for _, f in ipairs(pending) do
         print("Applying: " .. f.name)
         local migration = M.file.load(f.path)
         local ok, err = pcall(function()
-            M.runner.run(driver, migration, "up")
+            M.runner.run(driver, migration, "up", {
+                after = function(d)
+                    tracker.recordMigration(d, f.name)
+                end,
+            })
         end)
 
         if ok then
-            applied_names[#applied_names + 1] = f.name
             results[#results + 1] = { name = f.name, success = true }
             print("  Applied: " .. f.name)
         else
             results[#results + 1] = { name = f.name, success = false, error = err }
             print("  Failed: " .. f.name .. "\n  Error: " .. tostring(err))
-            -- Record all successful migrations before stopping
-            for _, name in ipairs(applied_names) do
-                tracker.recordMigration(driver, name)
-            end
-            error("Migration failed: " .. f.name)
+            errors.raise(errors.MIGRATION_FAILED, {
+                name = f.name,
+                error = tostring(err),
+            }, 2)
         end
-    end
-
-    -- Record all successful migrations after all complete
-    for _, name in ipairs(applied_names) do
-        tracker.recordMigration(driver, name)
     end
 
     return results
@@ -100,7 +99,6 @@ function M.rollback(driver, opts)
     end
 
     local results = {}
-    local rolled_back = {}
     local first_error = nil
 
     for _, name in ipairs(last_applied) do
@@ -108,29 +106,31 @@ function M.rollback(driver, opts)
         local path = "migrations/" .. name
         local ok, err = pcall(function()
             local migration = M.file.load(path)
-            M.runner.run(driver, migration, "down")
+            -- Drop tracker row in the same tx as the down migration (#176)
+            M.runner.run(driver, migration, "down", {
+                after = function(d)
+                    tracker.removeMigration(d, name)
+                end,
+            })
         end)
 
         if ok then
-            rolled_back[#rolled_back + 1] = name
             results[#results + 1] = { name = name, success = true }
             print("  Rolled back: " .. name)
         else
             results[#results + 1] = { name = name, success = false, error = err }
             print("  Failed: " .. name .. "\n  Error: " .. tostring(err))
             if not first_error then
-                first_error = "Rollback failed: " .. name
+                first_error = { name = name, error = tostring(err) }
             end
         end
     end
 
-    -- Remove tracker records for ALL successful rollbacks
-    for _, name in ipairs(rolled_back) do
-        tracker.removeMigration(driver, name)
-    end
-
     if first_error then
-        error(first_error)
+        errors.raise(errors.MIGRATION_ROLLBACK_FAILED, {
+            name = first_error.name,
+            error = first_error.error,
+        }, 2)
     end
 
     return results

@@ -91,5 +91,129 @@ describe("Error System", function()
             local msg = errors.getMessage("J9999")
             assert.is_truth(msg:match("Unknown error"))
         end)
+
+        it("preserves literal percent in details (#184)", function()
+            local msg = errors.getMessage("J1020", { details = "discount is 100%" })
+            assert.is_truth(msg:find("discount is 100%", 1, true))
+        end)
+
+        it("preserves %s and other percent sequences in details (#184)", function()
+            local msg = errors.getMessage("J1019", { error = "expected %s got %d" })
+            assert.is_truth(msg:find("expected %s got %d", 1, true))
+        end)
+
+        it("preserves lone percent at end of details (#184)", function()
+            local msg = errors.getMessage("J5004", { details = "progress 50%" })
+            assert.is_truth(msg:find("progress 50%", 1, true))
+        end)
+
+        it("build/raise keeps percent literals in message (#184)", function()
+            local ok, err = pcall(function()
+                errors.raise(errors.INVALID_INPUT, { details = "rate 100% ok" })
+            end)
+            assert.is_false(ok)
+            assert.is_truth(err.message:find("rate 100% ok", 1, true))
+        end)
+    end)
+
+    describe("raise", function()
+        it("raises a typed error with code", function()
+            local ok, err = pcall(function()
+                errors.raise(errors.NO_ROWS_FOUND, { table = "users" })
+            end)
+            assert.is_false(ok)
+            assert.are.equal("table", type(err))
+            assert.are.equal("J1008", err.code)
+            assert.is_truth(err.message:match("users"))
+        end)
+
+        it("aliases unique violation to J1016", function()
+            assert.are.equal(errors.UNIQUE_CONSTRAINT_VIOLATION, errors.UNIQUE_VIOLATION)
+            assert.are.equal("J1016", errors.UNIQUE_VIOLATION)
+        end)
+
+        it("aliases row not found to J1008", function()
+            assert.are.equal(errors.NO_ROWS_FOUND, errors.ROW_NOT_FOUND)
+        end)
+    end)
+
+    describe("classifyDriverError", function()
+        it("maps auth failures", function()
+            assert.are.equal(errors.AUTHENTICATION_FAILED,
+                errors.classifyDriverError("password authentication failed for user"))
+        end)
+
+        it("maps unique violations", function()
+            assert.are.equal(errors.UNIQUE_CONSTRAINT_VIOLATION,
+                errors.classifyDriverError("UNIQUE constraint failed: users.email"))
+        end)
+
+        it("maps foreign key violations", function()
+            assert.are.equal(errors.FOREIGN_KEY_VIOLATION,
+                errors.classifyDriverError("FOREIGN KEY constraint failed"))
+        end)
+
+        it("falls back to raw query failed", function()
+            assert.are.equal(errors.RAW_QUERY_FAILED,
+                errors.classifyDriverError("something unexpected"))
+        end)
+
+        it("maps postgres relation does not exist to TABLE_NOT_FOUND", function()
+            assert.are.equal(errors.TABLE_NOT_FOUND,
+                errors.classifyDriverError('relation "users" does not exist'))
+        end)
+
+        it("maps postgres column does not exist to COLUMN_NOT_FOUND", function()
+            assert.are.equal(errors.COLUMN_NOT_FOUND,
+                errors.classifyDriverError('column "email" does not exist'))
+        end)
+
+        it("maps postgres column of relation to COLUMN_NOT_FOUND", function()
+            assert.are.equal(errors.COLUMN_NOT_FOUND,
+                errors.classifyDriverError('column "email" of relation "users" does not exist'))
+        end)
+
+        it("maps sqlite no such table to TABLE_NOT_FOUND", function()
+            assert.are.equal(errors.TABLE_NOT_FOUND,
+                errors.classifyDriverError("no such table: users"))
+        end)
+
+        it("maps sqlite no such column to COLUMN_NOT_FOUND", function()
+            assert.are.equal(errors.COLUMN_NOT_FOUND,
+                errors.classifyDriverError("no such column: email"))
+        end)
+
+        it("maps mysql table doesn't exist to TABLE_NOT_FOUND", function()
+            assert.are.equal(errors.TABLE_NOT_FOUND,
+                errors.classifyDriverError("Table 'app.users' doesn't exist"))
+        end)
+
+        it("maps mysql unknown column to COLUMN_NOT_FOUND", function()
+            assert.are.equal(errors.COLUMN_NOT_FOUND,
+                errors.classifyDriverError("Unknown column 'email' in 'field list'"))
+        end)
+
+        it("maps unknown database to DATABASE_NOT_FOUND", function()
+            assert.are.equal(errors.DATABASE_NOT_FOUND,
+                errors.classifyDriverError("Unknown database 'missing'"))
+        end)
+
+        it("maps database does not exist to DATABASE_NOT_FOUND", function()
+            assert.are.equal(errors.DATABASE_NOT_FOUND,
+                errors.classifyDriverError('database "missing" does not exist'))
+        end)
+
+        it("maps no such database to DATABASE_NOT_FOUND", function()
+            assert.are.equal(errors.DATABASE_NOT_FOUND,
+                errors.classifyDriverError("no such database: missing"))
+        end)
+    end)
+
+    describe("build", function()
+        it("builds ConnectionError for J0xxx", function()
+            local err = errors.build(errors.CONNECTION_REFUSED, { host = "db", port = 5432 })
+            assert.are.equal("J0002", err.code)
+            assert.is_truth(err.message:match("db"))
+        end)
     end)
 end)

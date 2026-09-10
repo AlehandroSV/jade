@@ -9,4 +9,6 @@ function ConnectionError.new(code, message, details)
     return self
 end
 
+ConnectionError.__tostring = JadeError.tostring
+
 return ConnectionError

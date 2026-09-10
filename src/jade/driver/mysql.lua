@@ -2,6 +2,7 @@ local Driver = require("jade.driver.base")
 local Pool = require("jade.driver.pool")
 local Quoting = require("jade.util.quoting")
 local Json = require("jade.query.json")
+local errors = require("jade.errors")
 
 local MySQL = {}
 MySQL.__index = MySQL
@@ -59,10 +60,14 @@ local function validateEnvName(name)
     -- Environment variable names must be alphanumeric and underscores only
     -- This prevents command injection through malicious environment variable names
     if type(name) ~= "string" or name == "" then
-        error("Invalid environment variable name: rejected by security policy")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Invalid environment variable name: rejected by security policy",
+        }, 2)
     end
     if not name:match("^[A-Z_][A-Z0-9_]*$") then
-        error("Invalid environment variable name: rejected by security policy")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Invalid environment variable name: rejected by security policy",
+        }, 2)
     end
     return true
 end
@@ -97,6 +102,17 @@ local function setenv(name, value)
     end
 end
 
+--- Resolve MYSQL_OPT_SSL_MODE from config.ssl_verify.
+--- false/nil → REQUIRED (encrypt, no cert verify); true → VERIFY_IDENTITY.
+---@param ssl_verify boolean|nil
+---@return string
+function MySQL.resolveSSLMode(ssl_verify)
+    if ssl_verify then
+        return "VERIFY_IDENTITY"
+    end
+    return "REQUIRED"
+end
+
 -- Set SSL environment variables for MySQL C API
 -- The MySQL client library reads these automatically before connecting
 function MySQL:_setSSLEnv()
@@ -104,17 +120,11 @@ function MySQL:_setSSLEnv()
 
     local saved = {}
     local ssl_vars = {
-        { env = "MYSQL_OPT_SSL_MODE", value = "REQUIRED" },
+        { env = "MYSQL_OPT_SSL_MODE", value = MySQL.resolveSSLMode(self._config.ssl_verify) },
         { env = "MYSQL_SSL_CA", value = self._config.ssl_ca },
         { env = "MYSQL_SSL_CERT", value = self._config.ssl_cert },
         { env = "MYSQL_SSL_KEY", value = self._config.ssl_key },
     }
-
-    if self._config.ssl_verify == false then
-        ssl_vars[1].value = "VERIFY_CA"
-    elseif self._config.ssl_verify then
-        ssl_vars[1].value = "VERIFY_IDENTITY"
-    end
 
     for _, var in ipairs(ssl_vars) do
         if var.value then
@@ -163,11 +173,24 @@ function MySQL:_ensureConnected()
         self:_restoreSSLEnv(saved_env)
 
         if not success then
-            error("Failed to connect to MySQL: " .. tostring(result))
+            errors.raise(errors.classifyDriverError(result), {
+                host = self._config and self._config.host or "",
+                port = self._config and self._config.port or 0,
+                user = self._config and self._config.user or "",
+                database = self._config and self._config.database or "",
+                message = tostring(result),
+                error = tostring(result),
+                details = tostring(result),
+            }, 2)
         end
         local conn = result
         if not conn then
-            error("Failed to connect to MySQL: nil returned")
+            errors.raise(errors.CONNECTION_REFUSED, {
+                host = self._config and self._config.host or "",
+                port = self._config and self._config.port or 0,
+                message = "nil returned",
+                error = "nil returned",
+            }, 2)
         end
         return conn
     end
@@ -220,7 +243,10 @@ function MySQL:setEncryptionKey(conn)
         local sql = "SET @jade_encryption_key = '" .. escaped_key .. "'"
         local res, err = conn:execute(sql)
         if not res then
-            error("Failed to set encryption key session variable: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                error = tostring(err),
+                message = tostring(err),
+            }, 2)
         end
     end
 end
@@ -241,11 +267,24 @@ function MySQL:getConnection()
     self:_restoreSSLEnv(saved_env)
 
     if not success then
-        error("Failed to connect to MySQL: " .. tostring(result))
+        errors.raise(errors.classifyDriverError(result), {
+            host = self._config and self._config.host or "",
+            port = self._config and self._config.port or 0,
+            user = self._config and self._config.user or "",
+            database = self._config and self._config.database or "",
+            message = tostring(result),
+            error = tostring(result),
+            details = tostring(result),
+        }, 2)
     end
     local conn = result
     if not conn then
-        error("Failed to connect to MySQL: nil returned")
+        errors.raise(errors.CONNECTION_REFUSED, {
+            host = self._config and self._config.host or "",
+            port = self._config and self._config.port or 0,
+            message = "nil returned",
+            error = "nil returned",
+        }, 2)
     end
     -- Set encryption key for new connection
     self:setEncryptionKey(conn)
@@ -255,21 +294,21 @@ end
 function MySQL:beginTransaction(conn)
     local res, err = conn:execute("START TRANSACTION")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function MySQL:commitTransaction(conn)
     local res, err = conn:execute("COMMIT")
     if not res then
-        error("Failed to commit transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function MySQL:rollbackTransaction(conn)
     local res, err = conn:execute("ROLLBACK")
     if not res then
-        error("Failed to rollback transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
@@ -279,7 +318,10 @@ function MySQL:setQueryTimeout(timeout_ms)
     local sql = "SET max_execution_time = " .. tostring(timeout_ms)
     local res, err = self._conn:execute(sql)
     if not res then
-        error("Failed to set query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -289,7 +331,10 @@ function MySQL:clearQueryTimeout()
     local sql = "SET max_execution_time = 0"
     local res, err = self._conn:execute(sql)
     if not res then
-        error("Failed to clear query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -318,7 +363,11 @@ function MySQL:executeWithConnection(conn, sql, bindings)
         res, err = conn:execute(converted_sql)
     end
     if not res then
-        error("Query failed: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+            sql = sql,
+        }, 2)
     end
     return res
 end
@@ -346,7 +395,7 @@ function MySQL:execute(sql, bindings)
         res, err = self._conn:execute(converted_sql)
     end
     if not res then
-        error("Query failed: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), { error = tostring(err), message = tostring(err), sql = sql }, 2)
     end
     return res
 end
@@ -574,7 +623,9 @@ end
 
 function MySQL:generateBulkInsert(table_name, rows, entity)
     if #rows == 0 then
-        error("Cannot bulk insert zero rows")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Cannot bulk insert zero rows",
+        }, 2)
     end
 
     local columns = {}
@@ -736,7 +787,10 @@ function MySQL:getLastInsertId()
     self:_ensureConnected()
     local res, err = self._conn:execute("SELECT LAST_INSERT_ID() as id")
     if not res then
-        error("Failed to get last insert id: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
     local row = res:fetch({}, "a")
     return row and row.id
@@ -744,7 +798,9 @@ end
 
 --- Execute a function within a database transaction.
 -- Automatically commits on success, rolls back on error.
--- Uses the shared connection to ensure all operations are within the same transaction.
+-- With a connection pool, the entire fn is bound to one leased connection so
+-- nested driver:execute calls stay atomic. Without a pool, uses the shared
+-- connection.
 --
 -- IMPORTANT MySQL LIMITATION: DDL statements (CREATE TABLE, DROP TABLE, ALTER TABLE,
 -- TRUNCATE TABLE, RENAME TABLE) cause implicit commits in MySQL and CANNOT be rolled
@@ -755,12 +811,16 @@ end
 -- @param fn function The function to execute within the transaction
 -- @return boolean true if the transaction was committed successfully
 function MySQL:transaction(fn)
+    if self._pool then
+        return self._pool:transaction(fn)
+    end
+
     self:_ensureConnected()
 
     local conn = self._conn
     local res, err = conn:execute("START TRANSACTION")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 
     local ok, fn_err = pcall(fn)
@@ -768,7 +828,7 @@ function MySQL:transaction(fn)
     if ok then
         local commit_res, commit_err = conn:execute("COMMIT")
         if not commit_res then
-            error("Failed to commit transaction: " .. tostring(commit_err))
+            errors.raise(errors.TRANSACTION_FAILED, { error = tostring(commit_err) }, 2)
         end
         return true
     else
@@ -776,7 +836,9 @@ function MySQL:transaction(fn)
         if not rollback_res then
             -- Connection may be in undefined state after failed rollback
             self._conn = nil
-            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+            errors.raise(errors.TRANSACTION_FAILED, {
+                error = tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err),
+            }, 2)
         end
         -- Re-raise original error preserving context
         error(fn_err, 2)

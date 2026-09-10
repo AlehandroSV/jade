@@ -10,17 +10,53 @@ describe("Migration rollback atomicity", function()
         local migrations_table = {}
         local driver = {
             _migrations = migrations_table,
+            _driver_type = "sqlite",
         }
 
+        function driver:mapType(column_type)
+            local map = {
+                string = "TEXT",
+                integer = "INTEGER",
+                timestamp = "TEXT",
+            }
+            return map[column_type.type] or "TEXT"
+        end
+
+        function driver:supportsAutoIncrement()
+            return true
+        end
+
+        function driver:autoIncrementKeyword()
+            return "AUTOINCREMENT"
+        end
+
+        function driver:quoteIdentifier(name)
+            return "`" .. name:gsub("`", "``") .. "`"
+        end
+
         function driver:execute(sql, bindings)
+            local function row_name()
+                if bindings and bindings[1] then
+                    return bindings[1]
+                end
+                return sql:match("VALUES%s*%(%s*'([^']*)'") or sql:match("name%s*=%s*'([^']*)'")
+            end
             if sql:match("CREATE TABLE") then
                 return {}
+            elseif sql:match("ALTER TABLE") then
+                return {}
+            elseif sql:match("SELECT jade_version") then
+                return {}
             elseif sql:match("INSERT INTO _jade_migrations") then
-                migrations_table[#migrations_table + 1] = { name = bindings[1] }
+                local name = row_name()
+                if name then name = name:gsub("''", "'") end
+                migrations_table[#migrations_table + 1] = { name = name }
                 return {}
             elseif sql:match("DELETE FROM _jade_migrations") then
+                local name = row_name()
+                if name then name = name:gsub("''", "'") end
                 for i, row in ipairs(migrations_table) do
-                    if row.name == bindings[1] then
+                    if row.name == name then
                         table.remove(migrations_table, i)
                         break
                     end
@@ -73,9 +109,12 @@ describe("Migration rollback atomicity", function()
 
         -- Mock runner module
         M.runner = {
-            run = function(driver, migration, direction)
+            run = function(driver, migration, direction, run_opts)
                 if fail_migration and migration.name == fail_migration then
                     error("Migration failed: " .. migration.name)
+                end
+                if run_opts and run_opts.after then
+                    run_opts.after(driver)
                 end
                 return true
             end,
@@ -103,7 +142,7 @@ describe("Migration rollback atomicity", function()
 
         -- Should have thrown an error for the failed migration
         assert.is_falsy(ok)
-        assert.is_truthy(err:find("Rollback failed: 001_create_users"))
+        assert.is_truthy(tostring(err):find("001_create_users"))
 
         local applied = tracker.getAppliedMigrations(driver)
         -- 003 and 002 should be removed (their rollbacks succeeded)
@@ -129,7 +168,7 @@ describe("Migration rollback atomicity", function()
         assert.is_falsy(applied["002_add_email"])
     end)
 
-    it("does not remove any trackers when first rollback fails", function()
+    it("keeps failed tracker and still removes later successful rollbacks", function()
         local driver = mock_driver()
         setup_mocks({ fail_migration = "003_add_bio" })
 
@@ -138,18 +177,20 @@ describe("Migration rollback atomicity", function()
         tracker.recordMigration(driver, "002_add_email")
         tracker.recordMigration(driver, "003_add_bio")
 
-        -- Rollback 2 - 003 (newest) will fail first
+        -- Rollback 2 - 003 (newest) will fail first; 002 still runs
         local ok, err = pcall(function()
             M.rollback(driver, 2)
         end)
 
         assert.is_falsy(ok)
-        assert.is_truthy(err:find("Rollback failed: 003_add_bio"))
+        assert.is_truthy(tostring(err):find("003_add_bio"))
 
         local applied = tracker.getAppliedMigrations(driver)
-        -- All should still be tracked since first rollback failed
+        -- 001 was outside the rollback window
         assert.is_true(applied["001_create_users"])
-        assert.is_true(applied["002_add_email"])
+        -- 002 succeeded after the failure — tracker removed
+        assert.is_falsy(applied["002_add_email"])
+        -- 003 failed — tracker remains
         assert.is_true(applied["003_add_bio"])
     end)
 end)

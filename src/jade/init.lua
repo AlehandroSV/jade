@@ -61,8 +61,8 @@ local Jade = {
     _VERSION = require("jade._VERSION"),
 }
 
--- i18n
-Jade.i18n = require("jade.i18n")
+-- Errors (typed catalog J0xxx–J5xxx)
+Jade.errors = require("jade.errors")
 
 -- Types
 Jade.String = require("jade.types.string")
@@ -92,43 +92,37 @@ Jade.migration = require("jade.migration")
 -- Transaction
 Jade.transaction = require("jade.transaction.manager")
 
--- Soft Delete
-Jade.SoftDelete = require("jade.entity.soft_delete")
-
 -- Events
 Jade.Events = require("jade.entity.events")
 
 -- Security
 Jade.security = require("jade.security")
 
--- Audit (lazy load to avoid circular dependency)
+-- Lazy modules: load on first access (lighter require("jade"))
+local LAZY_MODULES = {
+    Audit = "jade.audit",
+    Encryption = "jade.encryption",
+    SoftDelete = "jade.entity.soft_delete",
+    Seed = "jade.seed",
+    Schema = "jade.schema",
+    Declarative = "jade.schema.declarative",
+    Cache = "jade.cache",
+    Database = "jade.database",
+}
+
 setmetatable(Jade, {
     __index = function(t, key)
-        if key == "Audit" then
-            local Audit = require("jade.audit")
-            rawset(t, "Audit", Audit)
-            return Audit
+        local mod = LAZY_MODULES[key]
+        if mod then
+            local loaded = require(mod)
+            rawset(t, key, loaded)
+            return loaded
         end
     end
 })
 
--- Encryption
-Jade.Encryption = require("jade.encryption")
-
--- Schema (DDL operations)
-Jade.Schema = require("jade.schema")
-
--- Declarative Schema
-Jade.Declarative = require("jade.schema.declarative")
-
 -- Driver registry
 Jade.drivers = require("jade.driver")
-
--- Cache
-Jade.cache = require("jade.cache")
-
--- Database (multi-database support)
-Jade.database = require("jade.database")
 
 -- Config
 Jade.config = require("jade.config")
@@ -169,11 +163,6 @@ end
 local context = require("jade.util.context")
 
 function Jade.configure(opts)
-    -- Set locale if provided
-    if opts.locale then
-        Jade.i18n.setLocale(opts.locale)
-    end
-
     -- Support URL-based configuration
     if opts.url then
         opts = Jade.config.parseURL(opts.url)
@@ -194,12 +183,19 @@ function Jade.configure(opts)
         local results_ = Jade.pluginLoader.loadAll(Jade, opts.plugins)
         for name_, res_ in pairs(results_) do
             if not res_.ok then
-                error("failed to load plugin '" .. name_ .. "': " .. tostring(res_.error))
+                Jade.errors.raise(Jade.errors.CONFIG_INVALID, {
+                    details = "failed to load plugin '" .. name_ .. "': " .. tostring(res_.error),
+                }, 2)
             end
         end
     end
 
     driver:connect(db)
+
+    -- Wire plugin query hooks (beforeQuery/afterQuery) onto this driver
+    if Jade.plugin and Jade.plugin.applyDriverExtensions then
+        Jade.plugin.applyDriverExtensions(driver)
+    end
 
     context.set("driver", driver)
     context.set("config", db)
@@ -221,7 +217,7 @@ end
 function Jade.driver()
     local driver = context.get("driver")
     if not driver then
-        error(Jade.i18n.t("not_configured"))
+        Jade.errors.raise(Jade.errors.CONFIG_MISSING, { path = "jade.configure()" }, 2)
     end
     return driver
 end
@@ -333,7 +329,7 @@ end
 function Jade.loadSchema(filepath)
     local f = io.open(filepath, "r")
     if not f then
-        error("Schema file not found: " .. filepath)
+        Jade.errors.raise(Jade.errors.CONFIG_MISSING, { path = filepath }, 2)
     end
     local content = f:read("*a")
     f:close()
@@ -353,6 +349,8 @@ function Jade.loadEntities(filepath)
             entities[name]:configure(driver)
         end
     end
+    -- Relations need every target entity to exist first (#178)
+    Jade.Declarative.wireRelations(entities, schema.models)
     return entities
 end
 
@@ -364,6 +362,214 @@ function Jade.syncSchema(filepath)
     for _, model in pairs(schema.models) do
         Jade.Declarative.createTableFromModel(driver, model)
     end
+end
+
+-- Only safe path characters for shell fallback (no quotes, $, `;, |, &, etc.)
+local LOAD_MODELS_SAFE_DIR = "^[%w_%./\\:%-]+$"
+local LOAD_MODELS_SAFE_FILE = "^[%w_%-]+%.lua$"
+
+--- Whether a directory path may be passed to a shell listing fallback.
+---@param path any
+---@return boolean
+local function isSafeShellPath(path)
+    if type(path) ~= "string" or path == "" then
+        return false
+    end
+    if path:find("\0", 1, true) then
+        return false
+    end
+    if path:find("..", 1, true) then
+        return false
+    end
+    return path:match(LOAD_MODELS_SAFE_DIR) ~= nil
+end
+
+--- List generated model files without interpolating untrusted paths into a shell.
+--- Prefers lfs.dir; shell is a last resort and only for whitelisted paths.
+---@param dir string
+---@return table<string, string> available model name -> file path
+local function listModelFiles(dir)
+    local available = {}
+
+    local ok_lfs, lfs_mod = pcall(require, "lfs")
+    if ok_lfs and lfs_mod and lfs_mod.dir then
+        local ok_dir, iter, state = pcall(lfs_mod.dir, dir)
+        if ok_dir and type(iter) == "function" then
+            for filename in iter, state do
+                if type(filename) == "string" and filename:match(LOAD_MODELS_SAFE_FILE) then
+                    local name = filename:gsub("%.lua$", "")
+                    available[name] = dir .. "/" .. filename
+                end
+            end
+            return available
+        end
+        -- lfs present but directory missing/unreadable
+        return available
+    end
+
+    if not isSafeShellPath(dir) then
+        return available
+    end
+
+    local handle = io.popen('ls "' .. dir .. '" 2>/dev/null')
+    if handle then
+        for filename in handle:lines() do
+            if filename:match(LOAD_MODELS_SAFE_FILE) then
+                local name = filename:gsub("%.lua$", "")
+                available[name] = dir .. "/" .. filename
+            end
+        end
+        handle:close()
+    end
+
+    if not next(available) then
+        handle = io.popen('dir "' .. dir .. '" /b 2>nul')
+        if handle then
+            for filename in handle:lines() do
+                if filename:match(LOAD_MODELS_SAFE_FILE) then
+                    local name = filename:gsub("%.lua$", "")
+                    available[name] = dir .. "/" .. filename
+                end
+            end
+            handle:close()
+        end
+    end
+
+    return available
+end
+
+--- Load generated model files lazily from a directory
+--- Models are loaded on first access, not upfront.
+--- Iteration is Lua 5.1-safe via `:modelNames()` / `:each()` (do not rely on `pairs`).
+---@param dir? string Directory path (default: "jade/generated")
+---@return table<string, Jade.Entity> models Proxy table that loads models on demand
+function Jade.loadModels(dir)
+    dir = dir or "jade/generated"
+    local cache = {}
+
+    local available = listModelFiles(dir)
+
+    local proxy = {}
+
+    -- Reload a single model (or all if no name given)
+    ---@param name? string Model name to reload (nil = reload all)
+    function proxy:reload(name)
+        if name then
+            cache[name] = nil
+        else
+            for k in pairs(cache) do cache[k] = nil end
+        end
+    end
+
+    -- Clear all cached models
+    function proxy:clearCache()
+        for k in pairs(cache) do cache[k] = nil end
+    end
+
+    --- Sorted list of discovered model names (works on Lua 5.1).
+    ---@return string[]
+    function proxy:modelNames()
+        local names = {}
+        for name in pairs(available) do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+        return names
+    end
+
+    --- Iterator of name, loaded-model pairs (works on Lua 5.1).
+    ---@return fun(): string?, Jade.Entity?
+    function proxy:each()
+        local names = self:modelNames()
+        local i = 0
+        return function()
+            i = i + 1
+            local name = names[i]
+            if name == nil then
+                return nil
+            end
+            return name, self[name]
+        end
+    end
+
+    --- Load every model into a plain map (works on Lua 5.1).
+    ---@return table<string, Jade.Entity>
+    function proxy:list()
+        local models = {}
+        for name, model in self:each() do
+            models[name] = model
+        end
+        return models
+    end
+
+    -- Return proxy that loads on access
+    return setmetatable(proxy, {
+        __index = function(_, key)
+            if not available[key] then return nil end
+            if cache[key] then return cache[key] end
+
+            local driver = context.get("driver")
+            local ok, model = pcall(dofile, available[key])
+            if ok and type(model) == "table" and model._table then
+                if driver then
+                    model:configure(driver)
+                end
+                cache[key] = model
+                return model
+            end
+            return nil
+        end,
+        -- Lua 5.2+ only; Lua 5.1 ignores this and must use :each() / :modelNames()
+        __pairs = function(t)
+            return t:each()
+        end,
+    })
+end
+
+--- Initialize Jade with a single call: configure + sync schema + load models
+---@param schema_path? string Path to .jade schema file (default: "schema/models.jade")
+---@param opts? table Override options: { database = {...}, sync = true/false }
+---@return table<string, Jade.Entity> models Lazy-loaded model proxy
+function Jade.init(schema_path, opts)
+    schema_path = schema_path or "schema/models.jade"
+    opts = opts or {}
+
+    -- 1. Load config
+    local config_path = opts.config_path or "jade.config.lua"
+    local config_ok, config = pcall(dofile, config_path)
+    if not config_ok then
+        Jade.errors.raise(Jade.errors.CONFIG_INVALID, {
+            details = "Failed to load config from " .. config_path .. ": " .. tostring(config),
+        }, 2)
+    end
+
+    -- Apply overrides
+    if opts.database then
+        config.database = opts.database
+    end
+
+    -- 2. Configure Jade
+    Jade.configure(config)
+
+    -- 3. Sync schema (create tables) unless explicitly skipped
+    local should_sync = opts.sync
+    if should_sync == nil then
+        -- Auto-detect: sync if schema file exists
+        local f = io.open(schema_path, "r")
+        if f then
+            f:close()
+            should_sync = true
+        else
+            should_sync = false
+        end
+    end
+
+    if should_sync then
+        Jade.syncSchema(schema_path)
+    end
+
+    -- 4. Load and return models
+    return Jade.loadModels(opts.models_dir or "jade/generated")
 end
 
 -- Shorthand Entity constructor that auto-configures the driver

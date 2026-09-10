@@ -2,6 +2,7 @@ local Driver = require("jade.driver.base")
 local Pool = require("jade.driver.pool")
 local Quoting = require("jade.util.quoting")
 local Json = require("jade.query.json")
+local errors = require("jade.errors")
 
 local SQLite = {}
 SQLite.__index = SQLite
@@ -59,7 +60,12 @@ function SQLite:_ensureConnected()
     local function connect()
         local conn, err = self._env:connect(self._config.database)
         if not conn then
-            error("Failed to connect to SQLite: " .. tostring(err))
+            errors.raise(errors.classifyDriverError(err), {
+                database = self._config.database,
+                message = tostring(err),
+                error = tostring(err),
+                details = tostring(err),
+            }, 2)
         end
 
         -- Enable WAL mode for better concurrency
@@ -105,7 +111,7 @@ end
 function SQLite:getConnection()
     local conn, err = self._env:connect(self._config.database)
     if not conn then
-        error("Failed to connect to SQLite: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), { database = self._config and self._config.database or "", message = tostring(err), error = tostring(err), details = tostring(err) }, 2)
     end
     return conn
 end
@@ -113,21 +119,21 @@ end
 function SQLite:beginTransaction(conn)
     local res, err = conn:execute("BEGIN")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function SQLite:commitTransaction(conn)
     local res, err = conn:execute("COMMIT")
     if not res then
-        error("Failed to commit transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
 function SQLite:rollbackTransaction(conn)
     local res, err = conn:execute("ROLLBACK")
     if not res then
-        error("Failed to rollback transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 end
 
@@ -137,7 +143,10 @@ function SQLite:setQueryTimeout(timeout_ms)
     local sql = "PRAGMA busy_timeout = " .. tostring(timeout_ms)
     local res, err = self._conn:execute(sql)
     if not res then
-        error("Failed to set query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -147,7 +156,10 @@ function SQLite:clearQueryTimeout()
     local sql = "PRAGMA busy_timeout = 0"
     local res, err = self._conn:execute(sql)
     if not res then
-        error("Failed to clear query timeout: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
 end
 
@@ -176,7 +188,11 @@ function SQLite:executeWithConnection(conn, sql, bindings)
         res, err = conn:execute(converted_sql)
     end
     if res == nil then
-        error("Query failed: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+            sql = sql,
+        }, 2)
     end
     return res
 end
@@ -197,7 +213,11 @@ function SQLite:execute(sql, bindings)
         res, err = self._conn:execute(converted_sql)
     end
     if res == nil then
-        error("Query failed: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+            sql = sql,
+        }, 2)
     end
     return res
 end
@@ -386,7 +406,9 @@ end
 
 function SQLite:generateBulkInsert(table_name, rows, entity)
     if #rows == 0 then
-        error("Cannot bulk insert zero rows")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Cannot bulk insert zero rows",
+        }, 2)
     end
 
     local columns = {}
@@ -547,7 +569,10 @@ function SQLite:getLastInsertId()
     self:_ensureConnected()
     local res, err = self._conn:execute("SELECT last_insert_rowid() as id")
     if not res then
-        error("Failed to get last insert id: " .. tostring(err))
+        errors.raise(errors.classifyDriverError(err), {
+            error = tostring(err),
+            message = tostring(err),
+        }, 2)
     end
     local row = res:fetch({}, "a")
     return row and row.id
@@ -555,17 +580,22 @@ end
 
 --- Execute a function within a database transaction.
 -- Automatically commits on success, rolls back on error.
--- Uses the shared connection to ensure all operations are within the same transaction.
--- SQLite supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
+-- With a connection pool, the entire fn is bound to one leased connection so
+-- nested driver:execute calls stay atomic. Without a pool, uses the shared
+-- connection. SQLite supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
 -- @param fn function The function to execute within the transaction
 -- @return boolean true if the transaction was committed successfully
 function SQLite:transaction(fn)
+    if self._pool then
+        return self._pool:transaction(fn)
+    end
+
     self:_ensureConnected()
 
     local conn = self._conn
     local res, err = conn:execute("BEGIN")
     if not res then
-        error("Failed to begin transaction: " .. tostring(err))
+        errors.raise(errors.TRANSACTION_FAILED, { error = tostring(err) }, 2)
     end
 
     local ok, fn_err = pcall(fn)
@@ -573,7 +603,7 @@ function SQLite:transaction(fn)
     if ok then
         local commit_res, commit_err = conn:execute("COMMIT")
         if not commit_res then
-            error("Failed to commit transaction: " .. tostring(commit_err))
+            errors.raise(errors.TRANSACTION_FAILED, { error = tostring(commit_err) }, 2)
         end
         return true
     else
@@ -581,7 +611,9 @@ function SQLite:transaction(fn)
         if not rollback_res then
             -- Connection may be in undefined state after failed rollback
             self._conn = nil
-            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+            errors.raise(errors.TRANSACTION_FAILED, {
+                error = tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err),
+            }, 2)
         end
         -- Re-raise original error preserving context
         error(fn_err, 2)

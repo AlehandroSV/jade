@@ -1,3 +1,5 @@
+local errors = require("jade.errors")
+
 local Pool = {}
 Pool.__index = Pool
 
@@ -12,6 +14,7 @@ function Pool.new(driver, options)
         idle_timeout = options.idle_timeout or 300,
         created = 0,
         checked_out = 0,
+        _tx_conn = nil,
     }, Pool)
 
     -- Pre-create min_size connections
@@ -142,7 +145,9 @@ function Pool:acquire()
         return self:acquire()
     end
 
-    error("Connection pool exhausted (max: " .. self.max_size .. ")")
+    errors.raise(errors.CONNECTION_POOL_EXHAUSTED, {
+        limit = self.max_size,
+    }, 2)
 end
 
 function Pool:release(conn)
@@ -184,6 +189,15 @@ function Pool:close()
 end
 
 function Pool:execute(sql, bindings)
+    -- Sticky transaction connection: all statements in an open tx share it
+    if self._tx_conn then
+        local ok, result = pcall(self.driver.executeWithConnection, self.driver, self._tx_conn, sql, bindings)
+        if not ok then
+            error(result)
+        end
+        return result
+    end
+
     local conn = self:acquire()
     local ok, result = pcall(self.driver.executeWithConnection, self.driver, conn, sql, bindings)
     self:release(conn)
@@ -191,6 +205,47 @@ function Pool:execute(sql, bindings)
         error(result)
     end
     return result
+end
+
+--- Run fn inside a pool-backed transaction on a single leased connection.
+-- Nested calls join the outer transaction (same connection, no extra BEGIN).
+-- @param fn function The function to execute within the transaction
+-- @return any The return value of fn on success
+function Pool:transaction(fn)
+    if self._tx_conn then
+        return fn()
+    end
+
+    return self:withConnection(function(conn)
+        local prev_tx = self._tx_conn
+        self._tx_conn = conn
+
+        local ok_begin, begin_err = pcall(self.driver.beginTransaction, self.driver, conn)
+        if not ok_begin then
+            self._tx_conn = prev_tx
+            error(begin_err)
+        end
+
+        local ok, fn_result = pcall(fn)
+
+        if ok then
+            self._tx_conn = prev_tx
+            local ok_commit, commit_err = pcall(self.driver.commitTransaction, self.driver, conn)
+            if not ok_commit then
+                error(commit_err)
+            end
+            return fn_result
+        end
+
+        local fn_err = fn_result
+
+        self._tx_conn = prev_tx
+        local ok_rollback, rollback_err = pcall(self.driver.rollbackTransaction, self.driver, conn)
+        if not ok_rollback then
+            error("Failed to rollback transaction: " .. tostring(rollback_err) .. "\nOriginal error: " .. tostring(fn_err))
+        end
+        error(fn_err)
+    end)
 end
 
 return Pool

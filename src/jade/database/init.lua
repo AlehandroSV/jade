@@ -43,7 +43,10 @@ end
 function M.connect(name)
     local config = connections[name]
     if not config then
-        error("Database '" .. name .. "' not registered. Use jade.database.register() first.")
+        local errors = require("jade.errors")
+        errors.raise(errors.CONFIG_MISSING, {
+            path = "jade.database.register('" .. tostring(name) .. "')",
+        }, 2)
     end
 
     local drivers = require("jade.driver")

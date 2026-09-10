@@ -1,17 +1,18 @@
 package = "jade"
 version = "scm-1"
 source = {
-    url = "git://github.com/AlehandroSV/Jade.git",
-    dir = "Jade"
+    url = "git+https://github.com/Jade-ORM/jade-orm-core.git",
+    dir = "jade-orm-core"
 }
 description = {
-    summary = "Um ORM moderno para Lua",
+    summary = "A modern ORM for Lua",
     detailed = [[
-        Jade e um ORM/Data Mapper moderno para Lua.
-        Features: schema declarativo, migrations automaticas,
-        query builder, relacoes, paginacao, transactions e soft delete.
+        Jade is a modern ORM/Data Mapper for Lua.
+        Features: declarative schema, automatic migrations,
+        query builder, relations, pagination, transactions,
+        soft delete, and a typed error catalog (J####).
     ]],
-    homepage = "https://github.com/AlehandroSV/jade",
+    homepage = "https://github.com/Jade-ORM/jade-orm-core",
     license = "MIT"
 }
 dependencies = {
@@ -74,6 +75,7 @@ build = {
         ["jade.migration.file"] = "src/jade/migration/file.lua",
         ["jade.migration.diff"] = "src/jade/migration/diff.lua",
         ["jade.migration.generator"] = "src/jade/migration/generator.lua",
+        ["jade.migration.codegen"] = "src/jade/migration/codegen.lua",
         ["jade.transaction"] = "src/jade/transaction/init.lua",
         ["jade.transaction.manager"] = "src/jade/transaction/manager.lua",
         ["jade.util.inflection"] = "src/jade/util/inflection.lua",
@@ -81,9 +83,6 @@ build = {
         ["jade.util.compat"] = "src/jade/util/compat.lua",
         ["jade.util.quoting"] = "src/jade/util/quoting.lua",
         ["jade.util.retry"] = "src/jade/util/retry.lua",
-        ["jade.i18n"] = "src/jade/i18n/init.lua",
-        ["jade.i18n.en"] = "src/jade/i18n/en.lua",
-        ["jade.i18n.pt-br"] = "src/jade/i18n/pt-br.lua",
         ["jade.security"] = "src/jade/security/init.lua",
         ["jade.security.sanitizer"] = "src/jade/security/sanitizer.lua",
         ["jade.security.validator"] = "src/jade/security/validator.lua",
@@ -116,5 +115,8 @@ build = {
         ["jade.plugin.audit"] = "src/jade/plugin/audit.lua",
         ["jade.plugin.encryption"] = "src/jade/plugin/encryption.lua",
         ["jade.plugin.cache"] = "src/jade/plugin/cache.lua",
+        ["jade.plugin.timestamps"] = "src/jade/plugin/timestamps.lua",
+        ["jade.plugin.tenant"] = "src/jade/plugin/tenant.lua",
+        ["jade.plugin.sql_log"] = "src/jade/plugin/sql_log.lua",
     }
 }

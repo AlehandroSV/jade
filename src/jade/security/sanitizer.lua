@@ -123,14 +123,15 @@ end
 -- @param identifier string The identifier to validate
 -- @return string The validated identifier
 function M.escapeIdentifier(identifier)
+    local errors = require("jade.errors")
     if type(identifier) ~= "string" then
-        error("Identifier must be a string")
+        errors.raise(errors.INVALID_IDENTIFIER, { identifier = tostring(identifier) }, 2)
     end
 
     -- Strict whitelist: only alphanumeric characters and underscores
     -- Must start with a letter or underscore
     if not identifier:match("^[%a_][%w_]*$") then
-        error("Invalid identifier: " .. identifier)
+        errors.raise(errors.INVALID_IDENTIFIER, { identifier = identifier }, 2)
     end
 
     return identifier
@@ -167,12 +168,22 @@ function M.escapeValue(value, column_type)
         return M.escapeString(value)
     elseif column_type == "integer" or column_type == "float" or column_type == "decimal" then
         if type(value) ~= "number" then
-            error("Expected number, got " .. type(value))
+            local errors = require("jade.errors")
+            errors.raise(errors.TYPE_MISMATCH, {
+                field = "value",
+                expected = "number",
+                received = type(value),
+            }, 2)
         end
         return tostring(value)
     elseif column_type == "boolean" then
         if type(value) ~= "boolean" then
-            error("Expected boolean, got " .. type(value))
+            local errors = require("jade.errors")
+            errors.raise(errors.TYPE_MISMATCH, {
+                field = "value",
+                expected = "boolean",
+                received = type(value),
+            }, 2)
         end
         return value and "TRUE" or "FALSE"
     elseif column_type == "timestamp" or column_type == "date" then

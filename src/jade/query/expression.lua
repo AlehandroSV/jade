@@ -159,10 +159,13 @@ end
 --- @return Jade.RawExpression Object with compile() method
 function Expression.raw(sql, ...)
     local bindings = { ... }
+    local errors = require("jade.errors")
 
     -- Validate the raw SQL for obviously dangerous patterns
     if type(sql) ~= "string" then
-        error("Expression.raw() requires a string SQL fragment")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Expression.raw() requires a string SQL fragment",
+        }, 2)
     end
     local upper = sql:upper()
     -- Block multi-statement (semicolons)
@@ -171,12 +174,12 @@ function Expression.raw(sql, ...)
         -- Only block if semicolon is not inside a quoted string
         local stripped = sql:gsub("'[^']*'", ""):gsub('"[^"]*"', "")
         if stripped:match(";") then
-            error("Expression.raw() does not allow multiple statements (contains ';')")
+            errors.raise(errors.SQL_INJECTION_DETECTED, { pattern = "multi-statement" }, 2)
         end
     end
     -- Block UNION injection
     if upper:match("UNION%s+ALL%s+SELECT") or upper:match("UNION%s+SELECT") then
-        error("Expression.raw() does not allow UNION SELECT")
+        errors.raise(errors.SQL_INJECTION_DETECTED, { pattern = "UNION SELECT" }, 2)
     end
 
     local raw = {

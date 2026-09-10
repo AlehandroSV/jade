@@ -88,7 +88,9 @@ end
 --- @return Jade.Query self for chaining
 function Query:timeout(ms)
     if type(ms) ~= "number" or ms <= 0 then
-        error("Timeout must be a positive number in milliseconds")
+        require("jade.errors").raise(require("jade.errors").INVALID_INPUT, {
+            details = "Timeout must be a positive number in milliseconds",
+        }, 2)
     end
     self._timeout = ms
     return self
@@ -120,16 +122,19 @@ function Query:where(condition)
 
         -- Validate raw SQL for dangerous patterns
         if type(raw_sql) ~= "string" then
-            error("Raw condition SQL must be a string")
+            require("jade.errors").raise(require("jade.errors").INVALID_INPUT, {
+                details = "Raw condition SQL must be a string",
+            }, 2)
         end
 
         -- Only validate when we have an actual string (some callers may pass other types)
         if type(raw_sql) == "string" and #raw_sql > 0 then
             local upper = raw_sql:upper()
+            local errors = require("jade.errors")
 
             -- Block UNION/UNION ALL SELECT — prevents result-set manipulation
             if upper:match("UNION%s+ALL%s+SELECT") or upper:match("UNION%s+SELECT") then
-                error("Raw WHERE condition does not allow UNION SELECT")
+                errors.raise(errors.SQL_INJECTION_DETECTED, { pattern = "UNION SELECT" }, 2)
             end
 
             -- Block destructive DDL/DML via semicolon injection
@@ -146,7 +151,7 @@ function Query:where(condition)
                            upper:match(";[%s]*EXECUTE[%s]") and "EXECUTE" or
                            upper:match(";[%s]*EXEC[%s]") and "EXEC"
             if bad_kw then
-                error("Raw WHERE condition does not allow '" .. bad_kw .. "' statements")
+                errors.raise(errors.SQL_INJECTION_DETECTED, { pattern = ";" .. bad_kw }, 2)
             end
         end
 
@@ -430,12 +435,14 @@ function Query:_eagerLoad(instances)
         local relation = self._entity._relations[rel_name]
         if not relation then
             local available = table.concat(self:_getRelationNames(), ", ")
-            error(string.format(
-                "Relation '%s' not found on entity '%s'. Available relations: %s",
-                rel_name,
-                self._entity._table,
-                available
-            ))
+            require("jade.errors").raise(require("jade.errors").INVALID_INPUT, {
+                details = string.format(
+                    "Relation '%s' not found on entity '%s'. Available relations: %s",
+                    rel_name,
+                    self._entity._table,
+                    available
+                ),
+            }, 2)
         end
     end
 
@@ -782,7 +789,9 @@ end
 
 function Query:updateAll(data)
     if not self._where_explicit then
-        error("updateAll() requires an explicit .where() filter to prevent accidental full-table update. Use .where(...) before calling .updateAll().")
+        require("jade.errors").raise(require("jade.errors").INVALID_INPUT, {
+            details = "updateAll() requires an explicit .where() filter to prevent accidental full-table update. Use .where(...) before calling .updateAll().",
+        }, 2)
     end
     local driver = self._entity._driver
     local where = self:_compileWhere()
@@ -793,7 +802,9 @@ end
 
 function Query:deleteAll()
     if not self._where_explicit then
-        error("deleteAll() requires an explicit .where() filter to prevent accidental full-table delete. Use .where(...) before calling .deleteAll().")
+        require("jade.errors").raise(require("jade.errors").INVALID_INPUT, {
+            details = "deleteAll() requires an explicit .where() filter to prevent accidental full-table delete. Use .where(...) before calling .deleteAll().",
+        }, 2)
     end
     local driver = self._entity._driver
     local where = self:_compileWhere()
@@ -841,9 +852,14 @@ function Query:toSQL()
     end
 
     local driver = self._entity._driver
-    local sql, bindings = driver:generateSelect(self)
-    Security.validateQuery(sql, bindings)
+    local ok, sql, bindings = pcall(function()
+        local generated_sql, generated_bindings = driver:generateSelect(self)
+        Security.validateQuery(generated_sql, generated_bindings)
+        return generated_sql, generated_bindings
+    end)
+    -- Always restore, even if generateSelect/validateQuery threw (#174)
     self._where = orig_where
+    if not ok then error(sql, 0) end
     return sql, bindings
 end
 

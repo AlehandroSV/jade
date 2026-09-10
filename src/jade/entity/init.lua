@@ -17,6 +17,17 @@ local Validations = require("jade.entity.validations")
 local Callbacks = require("jade.entity.callbacks")
 local Events = require("jade.entity.events")
 local Security = require("jade.security")
+local JadeErrors = require("jade.errors")
+
+--- Fire plugin CRUD hooks (beforeCreate, afterUpdate, ...) alongside Callbacks.
+local function firePluginCRUD(entity, method, event, instance, data)
+    local ok, plugin = pcall(require, "jade.plugin")
+    if not ok or not plugin.hooks then return end
+    local reg = plugin.hooks()
+    if type(reg) == "table" and type(reg.fireCRUD) == "function" then
+        pcall(reg.fireCRUD, entity, method, event, instance, data)
+    end
+end
 
 local Entity = {}
 Entity.__index = function(self, key)
@@ -53,24 +64,32 @@ function Entity.new(table_name, columns, options)
         _scopes = {},
     }, Entity)
 
-    -- Register column names and encrypted markers
-    local Encryption = require("jade.encryption")
+    -- Register column names; load encryption only when needed
+    local Encryption
     for name, col in pairs(columns) do
         col._name = name
         col._table = table_name
         if col._encrypted then
+            Encryption = Encryption or require("jade.encryption")
             Encryption.markColumn(table_name, name)
         end
     end
 
     -- Per-entity encryption configuration
     if type(options.encryption) == "table" and next(options.encryption) then
+        Encryption = Encryption or require("jade.encryption")
         Encryption.setEntityConfig(table_name, options.encryption)
     end
 
     -- Setup validations and callbacks
     Validations.setup(model)
     Callbacks.setup(model)
+
+    -- Plugin extendEntity hooks (methods/columns added by plugins)
+    local ok_plugin, plugin_api = pcall(require, "jade.plugin")
+    if ok_plugin and type(plugin_api.applyEntityExtensions) == "function" then
+        plugin_api.applyEntityExtensions(model)
+    end
 
     -- Auto-connect to assigned database if available
     if model._database then
@@ -346,7 +365,7 @@ end
 function Entity:findFirstOrThrow(options)
     local result = self:findFirst(options)
     if not result then
-        error("No " .. self._table .. " found with given conditions")
+        JadeErrors.raise(JadeErrors.NO_ROWS_FOUND, { table = self._table }, 2)
     end
     return result
 end
@@ -356,7 +375,9 @@ end
 --- @return nil|table Result or nil
 function Entity:findUnique(options)
     if not options or not options.where then
-        error("findUnique requires a where clause")
+        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+            details = "findUnique requires a where clause",
+        }, 2)
     end
     return self:findFirst(options)
 end
@@ -367,7 +388,7 @@ end
 function Entity:findUniqueOrThrow(options)
     local result = self:findUnique(options)
     if not result then
-        error("No " .. self._table .. " found with given unique conditions")
+        JadeErrors.raise(JadeErrors.NO_ROWS_FOUND, { table = self._table }, 2)
     end
     return result
 end
@@ -462,7 +483,9 @@ end
 
 function Entity:insertAll(rows)
     if #rows == 0 then
-        error("Cannot insert zero rows")
+        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+            details = "Cannot insert zero rows",
+        }, 2)
     end
     local sql, bindings = self._driver:generateBulkInsert(self._table, rows, self)
     return self._driver:execute(sql, bindings)
@@ -490,14 +513,20 @@ end
 -- Resolve a single relation instruction, return the target record's id
 function Entity:_resolveRelation(relName, instruction)
     local rel = self._relations[relName]
-    if not rel then error("Relation '" .. relName .. "' not defined") end
+    if not rel then
+        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+            details = "Relation '" .. relName .. "' not defined",
+        }, 2)
+    end
     local target = rel.target
 
     if instruction.connect then
         -- { connect = { id = N } } or { connect = { email = "..." } }
         local record = target:findUnique({ where = instruction.connect })
         if not record then
-            error("Cannot connect: no " .. target._table .. " found with " .. require("dkjson").encode(instruction.connect))
+            JadeErrors.raise(JadeErrors.NO_ROWS_FOUND, {
+                table = target._table,
+            }, 2)
         end
         return record._data.id
 
@@ -519,7 +548,10 @@ function Entity:_resolveRelation(relName, instruction)
         return instruction.id
 
     else
-        error("Invalid relation instruction for '" .. relName .. "'. Use { connect = {...} }, { create = {...} }, or { connectOrCreate = {...} }")
+        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+            details = "Invalid relation instruction for '" .. relName
+                .. "'. Use { connect = {...} }, { create = {...} }, or { connectOrCreate = {...} }",
+        }, 2)
     end
 end
 
@@ -565,16 +597,17 @@ function Entity:_resolveChildren(relations_data, parentInstance)
 
                     -- Guard against nil/empty values
                     if join_table == "" or source_fk == "" or target_fk == "" then
-                        error("HABTM relation '" .. key .. "' has empty join_table or foreign keys")
+                        JadeErrors.raise(JadeErrors.INVALID_INPUT, {
+                            details = "HABTM relation '" .. key .. "' has empty join_table or foreign keys",
+                        }, 2)
                     end
 
                     -- Validate identifier format to prevent SQL injection via table/column names
                     local function validate_identifier(name, label)
                         if not name:match("^[%a_][%w_]*$") then
-                            error(string.format(
-                                "Invalid %s '%s' in HABTM relation '%s'. Must be alphanumeric/underscore starting with letter or underscore.",
-                                label, name, key
-                            ))
+                            JadeErrors.raise(JadeErrors.INVALID_IDENTIFIER, {
+                                identifier = name,
+                            }, 2)
                         end
                     end
 
@@ -626,15 +659,18 @@ function Entity:create(data)
     Security.validateInput(columns_data, self._columns)
 
     -- Run validations on columns only
-    local errors = self:validate(columns_data)
-    if errors then
-        error("Validation failed: " .. table.concat(errors, ", "))
+    local validation_errors = self:validate(columns_data)
+    if validation_errors then
+        JadeErrors.raise(JadeErrors.DATA_VALIDATION_ERROR, {
+            error = table.concat(validation_errors, ", "),
+        }, 2)
     end
 
     -- Run around callbacks
     local result = Callbacks.runAround(self, "around_save", nil, columns_data, function()
         Callbacks.run(self, "before_save", nil, columns_data)
         Callbacks.run(self, "before_create", nil, columns_data)
+        firePluginCRUD(self, "create", "before", nil, columns_data)
 
         -- Prepare data with encryption markers
         local Encryption = require("jade.encryption")
@@ -655,6 +691,7 @@ function Entity:create(data)
 
         Callbacks.run(self, "after_create", instance, data)
         Callbacks.run(self, "after_save", instance, data)
+        firePluginCRUD(self, "create", "after", instance, data)
 
         -- Fire built-in event
         Events.fire(self, "created", { instance = instance, data = data })
@@ -704,15 +741,18 @@ function Entity:update(id_or_options, data)
         update_data.id = id
 
         -- Run validations
-        local errors = self:validate(update_data)
-        if errors then
-            error("Validation failed: " .. table.concat(errors, ", "))
+        local validation_errors = self:validate(update_data)
+        if validation_errors then
+            JadeErrors.raise(JadeErrors.DATA_VALIDATION_ERROR, {
+                error = table.concat(validation_errors, ", "),
+            }, 2)
         end
 
         -- Run around callbacks
         local result = Callbacks.runAround(self, "around_save", nil, update_data, function()
             Callbacks.run(self, "before_save", nil, update_data)
             Callbacks.run(self, "before_update", nil, update_data)
+            firePluginCRUD(self, "update", "before", nil, update_data)
 
             local Condition = require("jade.query.condition")
             local where = Condition.new("id", "=", id, self._table)
@@ -736,6 +776,7 @@ function Entity:update(id_or_options, data)
 
             Callbacks.run(self, "after_update", instance, update_data)
             Callbacks.run(self, "after_save", instance, update_data)
+            firePluginCRUD(self, "update", "after", instance, update_data)
 
             -- Fire built-in event
             Events.fire(self, "updated", { instance = instance, data = update_data })
@@ -767,6 +808,7 @@ function Entity:delete(id_or_options)
 
         -- Run callbacks
         Callbacks.run(self, "before_delete", nil, { id = id })
+        firePluginCRUD(self, "delete", "before", nil, { id = id })
 
         local Condition = require("jade.query.condition")
         local where = Condition.new("id", "=", id, self._table)
@@ -776,6 +818,7 @@ function Entity:delete(id_or_options)
         local instance = Instance.new(self, row)
 
         Callbacks.run(self, "after_delete", instance, { id = id })
+        firePluginCRUD(self, "delete", "after", instance, { id = id })
 
         -- Fire built-in event
         Events.fire(self, "deleted", { instance = instance, data = { id = id } })

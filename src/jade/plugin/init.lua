@@ -78,29 +78,32 @@ function M.use(plugin, options)
     end
 
     -- Register hooks first so setup() can fire them during execution
+    local install_opts = options or {}
     if plugin.hooks then
-        HookRegistry.registerPlugin(name, plugin.hooks)
+        HookRegistry.registerPlugin(name, plugin.hooks, install_opts)
+    else
+        HookRegistry.setPluginOptions(name, install_opts)
     end
 
-    -- Call setup if provided
+    -- Call setup if provided (preserve multi-return: setup() -> ok, err)
     if plugin.setup then
-        local setup_ok, setup_err = pcall(function()
-            return plugin.setup(M, options or {})
-        end)
-        if not setup_ok then
+        local packed = { pcall(plugin.setup, M, options or {}) }
+        local pcall_ok = packed[1]
+        if not pcall_ok then
             HookRegistry.unregister(name)
-            return false, "setup error for '" .. name .. "': " .. tostring(setup_err)
+            return false, "setup error for '" .. name .. "': " .. tostring(packed[2])
         end
-        if type(setup_err) == "string" then
+        local ret_ok, ret_err = packed[2], packed[3]
+        if ret_ok == false then
             HookRegistry.unregister(name)
-            return false, "setup returned error: " .. setup_err
+            return false, "setup returned error: " .. tostring(ret_err or "unknown")
         end
     end
 
     -- Store installed plugin
     installed[name] = {
         plugin     = plugin,
-        options    = options or {},
+        options    = install_opts,
         installed_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
     }
 
@@ -167,10 +170,13 @@ function M.applyDriverExtensions(driver)
 end
 
 --- Apply extension hooks to an entity instance (called after entity construction).
+--- Fires global `extendEntity` hooks so plugins can add methods/columns.
 --- @param entity table
---- @return table Decorated entity
+--- @return table entity
 function M.applyEntityExtensions(entity)
-    return HookRegistry.decorateEntity(entity)
+    HookRegistry.decorateEntity(entity)
+    HookRegistry.fire("extendEntity", { entity = entity, options = {} })
+    return entity
 end
 
 return M

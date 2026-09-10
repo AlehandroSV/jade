@@ -18,13 +18,16 @@ local M = {
     failed = 0,
     errors = {},
     _before_each = nil,
+    _after_each = nil,
 }
 
 function M.describe(name, fn)
     print("\n" .. name)
     local parent_before_each = M._before_each
+    local parent_after_each = M._after_each
     fn()
     M._before_each = parent_before_each
+    M._after_each = parent_after_each
 end
 
 function M.it(name, fn)
@@ -32,6 +35,13 @@ function M.it(name, fn)
         M._before_each()
     end
     local ok, err = pcall(fn)
+    if M._after_each then
+        local after_ok, after_err = pcall(M._after_each)
+        if not after_ok then
+            ok = false
+            err = tostring(err or "") .. " | after_each: " .. tostring(after_err)
+        end
+    end
     if ok then
         M.passed = M.passed + 1
         print("  \27[32m✓\27[0m " .. name)
@@ -45,6 +55,10 @@ end
 
 function M.before_each(fn)
     M._before_each = fn
+end
+
+function M.after_each(fn)
+    M._after_each = fn
 end
 
 -- Assertions module
@@ -144,6 +158,7 @@ end
 describe = M.describe
 it = M.it
 before_each = M.before_each
+after_each = M.after_each
 assert = M.assert
 
 -- Load and run test files
@@ -173,15 +188,15 @@ local test_files = {
     "driver/pool_spec.lua",
     "driver/mariadb_spec.lua",
     "driver/openresty_spec.lua",
-    "driver/openresty_spec.lua",
     "migration/tracker_spec.lua",
+    "migration/tracker_per_migration_spec.lua",
     "migration/diff_spec.lua",
     "migration/generator_spec.lua",
     "migration/rollback_spec.lua",
     "migration/api_spec.lua",
     "migration/file_spec.lua",
+    "seed/seed_spec.lua",
     "transaction/transaction_spec.lua",
-    "i18n/i18n_spec.lua",
     "security/sanitizer_spec.lua",
     "security/validator_spec.lua",
     "security/escape_spec.lua",
@@ -196,11 +211,14 @@ local test_files = {
     "query/state_isolation_spec.lua",
     "query/safe_bulk_spec.lua",
     "util/log_spec.lua",
+    "util/hash_spec.lua",
     "query/json_operators_spec.lua",
     "cache/cache_spec.lua",
     "encryption/encryption_spec.lua",
     "audit/audit_spec.lua",
     "database/database_spec.lua",
+    "plugin/plugin_system_spec.lua",
+    "load_models_spec.lua",
 }
 
 print("=== Jade ORM Test Suite ===")

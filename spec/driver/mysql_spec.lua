@@ -341,7 +341,19 @@ describe("MySQL Driver SQL Generation", function()
             mysql:_restoreSSLEnv(saved)
         end)
 
-        it("sets VERIFY_CA when ssl_verify is false", function()
+        it("resolves REQUIRED when ssl_verify is false (no cert verify)", function()
+            assert.are.equal("REQUIRED", MySQL.resolveSSLMode(false))
+        end)
+
+        it("resolves REQUIRED when ssl_verify is nil", function()
+            assert.are.equal("REQUIRED", MySQL.resolveSSLMode(nil))
+        end)
+
+        it("resolves VERIFY_IDENTITY when ssl_verify is true", function()
+            assert.are.equal("VERIFY_IDENTITY", MySQL.resolveSSLMode(true))
+        end)
+
+        it("sets REQUIRED when ssl_verify is false", function()
             local ok, ffi = pcall(require, "ffi")
             if not ok then return end
 
@@ -354,7 +366,7 @@ describe("MySQL Driver SQL Generation", function()
                 ssl_verify = false,
             }
             local saved = mysql:_setSSLEnv()
-            assert.are.equal("VERIFY_CA", os.getenv("MYSQL_OPT_SSL_MODE"))
+            assert.are.equal("REQUIRED", os.getenv("MYSQL_OPT_SSL_MODE"))
             mysql:_restoreSSLEnv(saved)
         end)
 
