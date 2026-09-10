@@ -12,8 +12,10 @@ local errors = require("jade.errors")
 -- @param driver table The database driver
 -- @param migration_module table The migration module with up/down functions
 -- @param action string The action to perform ("up" or "down")
+-- @param opts table|nil Optional `{ after = function(driver) end }` run inside
+--   the same transaction after the migration succeeds (e.g. tracker writes)
 -- @return boolean true if the migration was committed successfully
-function M.run(driver, migration_module, action)
+function M.run(driver, migration_module, action, opts)
     action = action or "up"
 
     local fn = migration_module[action]
@@ -21,6 +23,15 @@ function M.run(driver, migration_module, action)
         errors.raise(errors.MIGRATION_FILE_INVALID, {
             error = "Migration does not have a '" .. action .. "' function",
         }, 2)
+    end
+
+    local after = opts and opts.after
+    if after then
+        -- Migration DDL + tracker write commit or roll back together
+        return driver:transaction(function()
+            fn()
+            after(driver)
+        end)
     end
 
     -- Execute the migration within a transaction for atomicity
