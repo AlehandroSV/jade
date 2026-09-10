@@ -28,7 +28,8 @@ end
 function JadeError:format(template)
     local result = template
     for key, value in pairs(self.details) do
-        result = result:gsub("{" .. key .. "}", tostring(value))
+        -- Escape % so gsub replacement does not treat it as a capture ref
+        result = result:gsub("{" .. key .. "}", (tostring(value):gsub("%%", "%%%%")))
     end
     return result
 end
