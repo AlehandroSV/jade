@@ -188,7 +188,8 @@ function M.getMessage(code, details)
 
     local result = template
     for key, value in pairs(details) do
-        result = result:gsub("{" .. key .. "}", tostring(value))
+        -- Escape % so gsub replacement does not treat it as a capture ref
+        result = result:gsub("{" .. key .. "}", (tostring(value):gsub("%%", "%%%%")))
     end
     return result
 end
