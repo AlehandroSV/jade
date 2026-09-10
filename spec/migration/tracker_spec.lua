@@ -241,7 +241,8 @@ describe("Migration Tracker", function()
     end)
 
     describe("SQLite in-memory integration", function()
-        local SQLite = require("jade.driver.sqlite")
+        local luasql_ok = pcall(require, "luasql.sqlite3")
+        local SQLite = luasql_ok and require("jade.driver.sqlite") or nil
 
         local function connect_sqlite()
             local driver = SQLite.new()
@@ -270,6 +271,10 @@ describe("Migration Tracker", function()
         end
 
         it("creates tracker table on SQLite", function()
+            if not luasql_ok then
+                print("    (skip) luasql.sqlite3 not installed")
+                return
+            end
             local driver = connect_sqlite()
             tracker.createTrackerTable(driver)
             assert.is_true(has_column(driver, "id"))
@@ -280,6 +285,10 @@ describe("Migration Tracker", function()
         end)
 
         it("is idempotent on SQLite", function()
+            if not luasql_ok then
+                print("    (skip) luasql.sqlite3 not installed")
+                return
+            end
             local driver = connect_sqlite()
             tracker.createTrackerTable(driver)
             tracker.createTrackerTable(driver)
@@ -288,6 +297,10 @@ describe("Migration Tracker", function()
         end)
 
         it("upgrades legacy table missing jade_version", function()
+            if not luasql_ok then
+                print("    (skip) luasql.sqlite3 not installed")
+                return
+            end
             local driver = connect_sqlite()
             driver:execute([[
                 CREATE TABLE _jade_migrations (
@@ -303,6 +316,10 @@ describe("Migration Tracker", function()
         end)
 
         it("records, lists and removes migrations on SQLite", function()
+            if not luasql_ok then
+                print("    (skip) luasql.sqlite3 not installed")
+                return
+            end
             local driver = connect_sqlite()
             tracker.createTrackerTable(driver)
             tracker.recordMigration(driver, "20260715120000_create_users.lua")
@@ -324,6 +341,10 @@ describe("Migration Tracker", function()
         end)
 
         it("migration.init works on SQLite", function()
+            if not luasql_ok then
+                print("    (skip) luasql.sqlite3 not installed")
+                return
+            end
             local driver = connect_sqlite()
             local migration = require("jade.migration")
             migration.init(driver)
