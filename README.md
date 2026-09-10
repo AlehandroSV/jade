@@ -48,7 +48,6 @@ Jade is a modern ORM/Data Mapper for Lua that offers a modern development experi
 - **Seed System** - Register, execute, factory-based with faker defaults
 - **Security** - SQL injection detection, identifier quoting, input validation
 - **LuaLS Type Generation** - IDE autocomplete annotations from entity definitions
-- **i18n** - Internationalization (English, Portuguese)
 
 ### Installation
 
@@ -970,7 +969,6 @@ Jade e um ORM/Data Mapper moderno para Lua que oferece uma experiencia moderna d
 - **Sistema de Seeds** - Register, execute, padrao factory com defaults faker
 - **Seguranca** - Deteccao de SQL injection, quoting de identificadores, validacao de entrada
 - **Geracao de Tipos LuaLS** - Anotacoes de autocomplete para IDE a partir de definicoes de entidade
-- **i18n** - Internacionalizacao (Ingles, Portugues)
 
 ### Instalacao
 

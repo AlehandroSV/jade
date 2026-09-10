@@ -16,7 +16,6 @@ local M = {}
 --- @field logging? Jade.LoggingConfig Logging configuration
 --- @field encryption? Jade.EncryptionConfig Encryption settings
 --- @field plugins? Jade.PluginConfig[] Plugin configurations
---- @field locale? string Locale for i18n
 --- @field url? string Database URL (alternative to database object)
 --- @field env_vars? string[] Environment variable fallbacks
 

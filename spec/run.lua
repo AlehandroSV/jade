@@ -181,7 +181,6 @@ local test_files = {
     "migration/api_spec.lua",
     "migration/file_spec.lua",
     "transaction/transaction_spec.lua",
-    "i18n/i18n_spec.lua",
     "security/sanitizer_spec.lua",
     "security/validator_spec.lua",
     "security/escape_spec.lua",

@@ -61,9 +61,6 @@ local Jade = {
     _VERSION = require("jade._VERSION"),
 }
 
--- i18n
-Jade.i18n = require("jade.i18n")
-
 -- Types
 Jade.String = require("jade.types.string")
 Jade.Integer = require("jade.types.integer")
@@ -172,11 +169,6 @@ end
 local context = require("jade.util.context")
 
 function Jade.configure(opts)
-    -- Set locale if provided
-    if opts.locale then
-        Jade.i18n.setLocale(opts.locale)
-    end
-
     -- Support URL-based configuration
     if opts.url then
         opts = Jade.config.parseURL(opts.url)
@@ -224,7 +216,7 @@ end
 function Jade.driver()
     local driver = context.get("driver")
     if not driver then
-        error(Jade.i18n.t("not_configured"))
+        error("Jade not configured. Call jade.configure() first.")
     end
     return driver
 end
