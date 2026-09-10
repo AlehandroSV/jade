@@ -47,6 +47,37 @@ describe("Declarative .jade parser", function()
             assert.is_not_nil(schema.models)
             assert.is_not_nil(schema.options)
         end)
+
+        it("parses field names containing underscores", function()
+            local schema = Declarative.parsedeclarativeSchema([[
+                model User {
+                    github_id = BigInt()!
+                    avatar_url = String(500)?
+                    login = String(255)!
+                }
+            ]])
+            local fields = schema.models.User.fields
+            assert.is_not_nil(fields.github_id)
+            assert.is_not_nil(fields.avatar_url)
+            assert.is_not_nil(fields.login)
+            assert.are.equal("bigint", fields.github_id.type)
+            assert.are.equal("string", fields.avatar_url.type)
+            assert.are.equal(500, fields.avatar_url.length)
+            assert.is_true(fields.github_id.not_null)
+            assert.is_nil(fields.avatar_url.not_null)
+            assert.is_true(fields.avatar_url.nullable)
+        end)
+
+        it("parses snake_case relation names", function()
+            local schema = Declarative.parsedeclarativeSchema([[
+                model User {
+                    github_id = BigInt()!
+                    blog_posts = hasMany(Post)
+                }
+            ]])
+            assert.is_not_nil(schema.models.User.fields.github_id)
+            assert.is_not_nil(schema.models.User.relations.blog_posts)
+        end)
     end)
 
     describe("_parsedeclarativeField", function()

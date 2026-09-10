@@ -940,7 +940,7 @@ function Declarative.parsedeclarativeSchema(schema_str)
         local trimmed = line:match("^%s*(.-)%s*$")
         if trimmed ~= "" and not trimmed:match("^%-%-") then
             -- Model start: model Name {
-            local model_name = trimmed:match("^model%s+(%w+)%s*{?$")
+            local model_name = trimmed:match("^model%s+([A-Za-z_][A-Za-z0-9_]*)%s*{?$")
             if model_name then
                 current_model = {
                     name = model_name,
@@ -955,7 +955,7 @@ function Declarative.parsedeclarativeSchema(schema_str)
                 current_model = nil
             elseif current_model then
                 -- Option: table = "custom_name"
-                local option_key, option_val = trimmed:match("^(%w+)%s*=%s*(.+)$")
+                local option_key, option_val = trimmed:match("^([A-Za-z_][A-Za-z0-9_]*)%s*=%s*(.+)$")
                 if option_key == "table" then
                     current_model.tableName = option_val:match('^"(.*)"$') or option_val
                 elseif option_key == "timestamps" and (option_val == "true" or option_val == "false") then
@@ -964,7 +964,7 @@ function Declarative.parsedeclarativeSchema(schema_str)
                     current_model.options.noId = true
                 else
                     -- Field definition
-                    local field_name, field_def = trimmed:match("^(%w+)%s*=%s*(.+)$")
+                    local field_name, field_def = trimmed:match("^([A-Za-z_][A-Za-z0-9_]*)%s*=%s*(.+)$")
                     if field_name and field_def then
                         local field = Declarative._parsedeclarativeField(field_name, field_def)
                         if field.relation then
