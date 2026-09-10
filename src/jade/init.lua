@@ -362,26 +362,90 @@ function Jade.syncSchema(filepath)
     end
 end
 
---- Load generated model files lazily from a directory
---- Models are loaded on first access, not upfront
----@param dir? string Directory path (default: "jade/generated")
----@return table<string, Jade.Entity> models Proxy table that loads models on demand
-function Jade.loadModels(dir)
-    dir = dir or "jade/generated"
-    local cache = {}
+-- Only safe path characters for shell fallback (no quotes, $, `;, |, &, etc.)
+local LOAD_MODELS_SAFE_DIR = "^[%w_%./\\:%-]+$"
+local LOAD_MODELS_SAFE_FILE = "^[%w_%-]+%.lua$"
 
-    -- Scan directory once to get available model names
+--- Whether a directory path may be passed to a shell listing fallback.
+---@param path any
+---@return boolean
+local function isSafeShellPath(path)
+    if type(path) ~= "string" or path == "" then
+        return false
+    end
+    if path:find("\0", 1, true) then
+        return false
+    end
+    if path:find("..", 1, true) then
+        return false
+    end
+    return path:match(LOAD_MODELS_SAFE_DIR) ~= nil
+end
+
+--- List generated model files without interpolating untrusted paths into a shell.
+--- Prefers lfs.dir; shell is a last resort and only for whitelisted paths.
+---@param dir string
+---@return table<string, string> available model name -> file path
+local function listModelFiles(dir)
     local available = {}
-    local handle = io.popen('ls "' .. dir .. '" 2>/dev/null || dir /b "' .. dir .. '" 2>nul')
+
+    local ok_lfs, lfs_mod = pcall(require, "lfs")
+    if ok_lfs and lfs_mod and lfs_mod.dir then
+        local ok_dir, iter, state = pcall(lfs_mod.dir, dir)
+        if ok_dir and type(iter) == "function" then
+            for filename in iter, state do
+                if type(filename) == "string" and filename:match(LOAD_MODELS_SAFE_FILE) then
+                    local name = filename:gsub("%.lua$", "")
+                    available[name] = dir .. "/" .. filename
+                end
+            end
+            return available
+        end
+        -- lfs present but directory missing/unreadable
+        return available
+    end
+
+    if not isSafeShellPath(dir) then
+        return available
+    end
+
+    local handle = io.popen('ls "' .. dir .. '" 2>/dev/null')
     if handle then
         for filename in handle:lines() do
-            if filename:match("%.lua$") then
+            if filename:match(LOAD_MODELS_SAFE_FILE) then
                 local name = filename:gsub("%.lua$", "")
                 available[name] = dir .. "/" .. filename
             end
         end
         handle:close()
     end
+
+    if not next(available) then
+        handle = io.popen('dir "' .. dir .. '" /b 2>nul')
+        if handle then
+            for filename in handle:lines() do
+                if filename:match(LOAD_MODELS_SAFE_FILE) then
+                    local name = filename:gsub("%.lua$", "")
+                    available[name] = dir .. "/" .. filename
+                end
+            end
+            handle:close()
+        end
+    end
+
+    return available
+end
+
+--- Load generated model files lazily from a directory
+--- Models are loaded on first access, not upfront.
+--- Iteration is Lua 5.1-safe via `:modelNames()` / `:each()` (do not rely on `pairs`).
+---@param dir? string Directory path (default: "jade/generated")
+---@return table<string, Jade.Entity> models Proxy table that loads models on demand
+function Jade.loadModels(dir)
+    dir = dir or "jade/generated"
+    local cache = {}
+
+    local available = listModelFiles(dir)
 
     local proxy = {}
 
@@ -398,6 +462,42 @@ function Jade.loadModels(dir)
     -- Clear all cached models
     function proxy:clearCache()
         for k in pairs(cache) do cache[k] = nil end
+    end
+
+    --- Sorted list of discovered model names (works on Lua 5.1).
+    ---@return string[]
+    function proxy:modelNames()
+        local names = {}
+        for name in pairs(available) do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+        return names
+    end
+
+    --- Iterator of name, loaded-model pairs (works on Lua 5.1).
+    ---@return fun(): string?, Jade.Entity?
+    function proxy:each()
+        local names = self:modelNames()
+        local i = 0
+        return function()
+            i = i + 1
+            local name = names[i]
+            if name == nil then
+                return nil
+            end
+            return name, self[name]
+        end
+    end
+
+    --- Load every model into a plain map (works on Lua 5.1).
+    ---@return table<string, Jade.Entity>
+    function proxy:list()
+        local models = {}
+        for name, model in self:each() do
+            models[name] = model
+        end
+        return models
     end
 
     -- Return proxy that loads on access
@@ -417,8 +517,9 @@ function Jade.loadModels(dir)
             end
             return nil
         end,
-        __pairs = function()
-            return pairs(available)
+        -- Lua 5.2+ only; Lua 5.1 ignores this and must use :each() / :modelNames()
+        __pairs = function(t)
+            return t:each()
         end,
     })
 end
