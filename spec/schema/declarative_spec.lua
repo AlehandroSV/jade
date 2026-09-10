@@ -220,4 +220,40 @@ describe("Declarative Schema", function()
             assert.is_not_nil(schema.models.Post)
         end)
     end)
+
+    describe("generateFullModel relation FK side (#173)", function()
+        it("uses parent FK for hasMany from table-format relations", function()
+            local model = Declarative.parseModel("User", {
+                name = "string",
+                relations = {
+                    posts = { type = "hasMany", model = "Post" },
+                },
+            })
+            local code = Declarative.generateFullModel(model)
+            assert.is_truthy(code:find('hasMany("Post", { foreign_key = "user_id" })', 1, true))
+            assert.is_nil(code:find('foreign_key = "post_id"', 1, true))
+        end)
+
+        it("uses parent FK for hasOne from table-format relations", function()
+            local model = Declarative.parseModel("User", {
+                name = "string",
+                relations = {
+                    profile = { type = "hasOne", model = "Profile" },
+                },
+            })
+            local code = Declarative.generateFullModel(model)
+            assert.is_truthy(code:find('hasOne("Profile", { foreign_key = "user_id" })', 1, true))
+        end)
+
+        it("uses target FK for belongsTo from table-format relations", function()
+            local model = Declarative.parseModel("Post", {
+                title = "string",
+                relations = {
+                    user = { type = "belongsTo", model = "User" },
+                },
+            })
+            local code = Declarative.generateFullModel(model)
+            assert.is_truthy(code:find('belongsTo("User", { foreign_key = "user_id" })', 1, true))
+        end)
+    end)
 end)

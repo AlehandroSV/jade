@@ -103,6 +103,110 @@ describe("Declarative .jade parser", function()
             local field = Declarative._parsedeclarativeField("author", "belongsTo(User)")
             assert.are.equal("user_id", field.relation.foreign_key)
         end)
+
+        -- #173: hasMany/hasOne FK lives on the child, named after the parent
+        it("generates parent foreign key for hasMany", function()
+            local field = Declarative._parsedeclarativeField("posts", "hasMany(Post)", "User")
+            assert.are.equal("hasMany", field.relation.type)
+            assert.are.equal("user_id", field.relation.foreign_key)
+        end)
+
+        it("generates parent foreign key for hasOne", function()
+            local field = Declarative._parsedeclarativeField("profile", "hasOne(Profile)", "User")
+            assert.are.equal("hasOne", field.relation.type)
+            assert.are.equal("user_id", field.relation.foreign_key)
+        end)
+
+        it("generates target foreign key for belongsTo with parent", function()
+            local field = Declarative._parsedeclarativeField("author", "belongsTo(User)", "Post")
+            assert.are.equal("user_id", field.relation.foreign_key)
+        end)
+    end)
+
+    describe("generateFullModel relation foreign_key side (#173)", function()
+        it("emits parent FK for hasMany", function()
+            local schema = Declarative.parsedeclarativeSchema([[
+                model User {
+                    name = String(120)!
+                    posts = hasMany(Post)
+                }
+                model Post {
+                    title = String(255)!
+                    author = belongsTo(User)
+                }
+            ]])
+            local code = Declarative.generateFullModel(schema.models.User, schema.models)
+            assert.is_truthy(code:find('hasMany("Post", { foreign_key = "user_id" })', 1, true))
+            assert.is_nil(code:find('foreign_key = "post_id"', 1, true))
+        end)
+
+        it("emits parent FK for hasOne", function()
+            local schema = Declarative.parsedeclarativeSchema([[
+                model User {
+                    name = String(120)!
+                    profile = hasOne(Profile)
+                }
+                model Profile {
+                    bio = Text()?
+                }
+            ]])
+            local code = Declarative.generateFullModel(schema.models.User, schema.models)
+            assert.is_truthy(code:find('hasOne("Profile", { foreign_key = "user_id" })', 1, true))
+            assert.is_nil(code:find('foreign_key = "profile_id"', 1, true))
+        end)
+
+        it("emits target FK for belongsTo", function()
+            local schema = Declarative.parsedeclarativeSchema([[
+                model User {
+                    name = String(120)!
+                }
+                model Post {
+                    title = String(255)!
+                    author = belongsTo(User)
+                }
+            ]])
+            local code = Declarative.generateFullModel(schema.models.Post, schema.models)
+            assert.is_truthy(code:find('belongsTo("User", { foreign_key = "user_id" })', 1, true))
+        end)
+
+        it("stores parent FK on parsed hasMany relation", function()
+            local schema = Declarative.parsedeclarativeSchema([[
+                model User {
+                    name = String(120)!
+                    posts = hasMany(Post)
+                }
+                model Post {
+                    title = String(255)!
+                }
+            ]])
+            assert.are.equal("user_id", schema.models.User.relations.posts.foreign_key)
+        end)
+
+        it("stores parent FK on parsed hasOne relation", function()
+            local schema = Declarative.parsedeclarativeSchema([[
+                model User {
+                    name = String(120)!
+                    profile = hasOne(Profile)
+                }
+                model Profile {
+                    bio = Text()?
+                }
+            ]])
+            assert.are.equal("user_id", schema.models.User.relations.profile.foreign_key)
+        end)
+
+        it("stores target FK on parsed belongsTo relation", function()
+            local schema = Declarative.parsedeclarativeSchema([[
+                model User {
+                    name = String(120)!
+                }
+                model Post {
+                    title = String(255)!
+                    author = belongsTo(User)
+                }
+            ]])
+            assert.are.equal("user_id", schema.models.Post.relations.author.foreign_key)
+        end)
     end)
 
     describe("generateEntity from .jade", function()

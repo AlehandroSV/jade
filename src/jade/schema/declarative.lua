@@ -42,6 +42,20 @@ Declarative.conventions = {
     end,
 }
 
+--- Resolve FK column name by relation side (#173).
+--- belongsTo: FK lives on this entity, named after the target model.
+--- hasMany/hasOne: FK lives on the child, named after the parent (source) model.
+--- @param rel_type string "belongsTo" | "hasMany" | "hasOne"
+--- @param source_model_name string Parent/source model name
+--- @param target_model_name string Related model name
+--- @return string foreign_key column name
+function Declarative.resolveRelationForeignKey(rel_type, source_model_name, target_model_name)
+    if rel_type == "belongsTo" then
+        return Declarative.conventions.foreignKey(target_model_name)
+    end
+    return Declarative.conventions.foreignKey(source_model_name)
+end
+
 -- Type mapping from simple names to column definitions
 Declarative.typeMap = {
     string = { type = "string", length = 255 },
@@ -668,12 +682,9 @@ function Declarative.generateFullModel(model, all_models)
 
     -- Relations
     for rel_name, rel in pairs(model.relations or {}) do
-        if rel.type == "hasMany" then
-            lines[#lines + 1] = string.format('%s:hasMany("%s", { foreign_key = "%s" })', name, rel.model, Declarative.conventions.foreignKey(rel.model))
-        elseif rel.type == "belongsTo" then
-            lines[#lines + 1] = string.format('%s:belongsTo("%s", { foreign_key = "%s" })', name, rel.model, Declarative.conventions.foreignKey(rel.model))
-        elseif rel.type == "hasOne" then
-            lines[#lines + 1] = string.format('%s:hasOne("%s", { foreign_key = "%s" })', name, rel.model, Declarative.conventions.foreignKey(rel.model))
+        if rel.type == "hasMany" or rel.type == "belongsTo" or rel.type == "hasOne" then
+            local fk = Declarative.resolveRelationForeignKey(rel.type, name, rel.model)
+            lines[#lines + 1] = string.format('%s:%s("%s", { foreign_key = "%s" })', name, rel.type, rel.model, fk)
         end
     end
 
@@ -943,7 +954,7 @@ function Declarative.parsedeclarativeSchema(schema_str)
                     -- Field definition
                     local field_name, field_def = trimmed:match("^(%w+)%s*=%s*(.+)$")
                     if field_name and field_def then
-                        local field = Declarative._parsedeclarativeField(field_name, field_def)
+                        local field = Declarative._parsedeclarativeField(field_name, field_def, current_model.name)
                         if field.relation then
                             current_model.relations[field_name] = field.relation
                         else
@@ -974,7 +985,10 @@ function Declarative.parsedeclarativeSchema(schema_str)
 end
 
 -- Parse a single declarative field definition
-function Declarative._parsedeclarativeField(name, def)
+-- @param name string Field name
+-- @param def string Field definition expression
+-- @param parent_model_name? string Owning model (required for correct hasMany/hasOne FK side)
+function Declarative._parsedeclarativeField(name, def, parent_model_name)
     local result = { name = name }
 
     -- Check for modifiers
@@ -1008,11 +1022,18 @@ function Declarative._parsedeclarativeField(name, def)
         end
     end
     if rel_type then
+        local foreign_key
+        if rel_type == "belongsTo" then
+            foreign_key = Declarative.conventions.foreignKey(rel_model)
+        elseif parent_model_name then
+            -- hasMany/hasOne: FK is on the child, named after the parent (#173)
+            foreign_key = Declarative.conventions.foreignKey(parent_model_name)
+        end
         result.relation = {
             type = rel_type,
             model = rel_model,
             target = rel_model,
-            foreign_key = Declarative.conventions.foreignKey(rel_model),
+            foreign_key = foreign_key,
         }
         return result
     end
