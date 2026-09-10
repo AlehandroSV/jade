@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] — 2026-09-10
+
+Patch release for the declarative `.jade` parser.
+
+### Fixed
+
+- **Field names with underscores are no longer dropped** (#207).
+  `parsedeclarativeSchema` matched identifiers with `%w+`, which does not
+  include `_`. Real-world fields such as `github_id`, `avatar_url`,
+  `user_id`, and `expires_at` were silently ignored, breaking the canonical
+  `models.jade → esmeralda generate` flow. Identifier pattern is now
+  `[A-Za-z_][A-Za-z0-9_]*` for model names, option keys, and field names.
+- Snake_case relation names (`blog_posts = hasMany(Post)`) parse correctly.
+
+### Validation
+
+- Unit suite: **858 tests, all green** on Lua 5.1, 5.2, 5.3, 5.4.
+- CI matrix: Lua 5.1–5.5 + LuaJIT.
+
 ## [2.0.0] — 2026-09-10
 
 Jade v2 is an **ecosystem cut**, not a rewrite of the core. The core ships a
@@ -82,4 +101,5 @@ Audit series #170–#187 (PRs #188–#205):
 4. Re-run migrations on SQLite/MySQL — tracker DDL is now portable.
 5. Plugin authors: `extendEntity` context now carries install options.
 
+[2.0.1]: https://github.com/Jade-ORM/jade-orm-core/releases/tag/v2.0.1
 [2.0.0]: https://github.com/Jade-ORM/jade-orm-core/releases/tag/v2.0.0
