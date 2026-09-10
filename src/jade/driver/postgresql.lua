@@ -272,6 +272,14 @@ function PostgreSQL:execute(sql, bindings)
 end
 
 function PostgreSQL:mapType(column_type)
+    -- Auto-increment integer PKs map to SERIAL (type, not a PRIMARY KEY suffix).
+    if column_type.type == "integer"
+        and column_type._primary_key
+        and column_type._auto_increment
+    then
+        return "SERIAL"
+    end
+
     local map = {
         string = "VARCHAR(" .. (column_type.length or 255) .. ")",
         text = "TEXT",

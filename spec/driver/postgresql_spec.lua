@@ -46,6 +46,17 @@ describe("PostgreSQL Driver SQL Generation", function()
             local col = Timestamp()
             assert.are.equal("TIMESTAMPTZ", driver:mapType(col))
         end)
+
+        it("maps auto-increment integer primary key to SERIAL", function()
+            local col = Integer():primaryKey()
+            col._auto_increment = true
+            assert.are.equal("SERIAL", driver:mapType(col))
+        end)
+
+        it("maps plain integer primary key without auto increment to INTEGER", function()
+            local col = Integer():primaryKey()
+            assert.are.equal("INTEGER", driver:mapType(col))
+        end)
     end)
 
     describe("generateSelect", function()
