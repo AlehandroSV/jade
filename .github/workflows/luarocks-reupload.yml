@@ -1,0 +1,44 @@
+name: LuaRocks re-upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to re-upload (e.g. 2.0.1, without v prefix)"
+        required: true
+        default: "2.0.1"
+
+jobs:
+  reupload:
+    name: Force re-upload to LuaRocks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.version }}
+
+      - name: Install Lua
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.4"
+
+      - name: Install LuaRocks
+        uses: leafo/gh-actions-luarocks@v4
+
+      - name: Prepare rockspec
+        run: |
+          VERSION="${{ inputs.version }}"
+          sed "s/version = \"scm-1\"/version = \"${VERSION}-1\"/" jade-scm-1.rockspec > "jade-${VERSION}-1.rockspec"
+          # scm already has correct url/dir; only inject tag
+          sed -i "s|url = \"git+https://github.com/Jade-ORM/jade-orm-core.git\"|url = \"git+https://github.com/Jade-ORM/jade-orm-core.git\",\\n    tag = \"v${VERSION}\"|" "jade-${VERSION}-1.rockspec"
+          echo "----- rockspec -----"
+          head -20 "jade-${VERSION}-1.rockspec"
+
+      - name: Force upload
+        env:
+          LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          luarocks upload "jade-${VERSION}-1.rockspec" --api-key="$LUAROCKS_API_KEY" --force

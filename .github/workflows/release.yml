@@ -30,7 +30,10 @@ jobs:
         run: |
           VERSION=${GITHUB_REF_NAME#v}
           sed "s/version = \"scm-1\"/version = \"${VERSION}-1\"/" jade-scm-1.rockspec > jade-${VERSION}-1.rockspec
-          sed -i "s|url = \".*\"|url = \"git+https://github.com/Jade-ORM/jade-orm-core.git\",\\n    tag = \\\"${GITHUB_REF_NAME}\\\",\\n    dir = \\\"jade-orm-core\\\"|" jade-${VERSION}-1.rockspec
+          # scm already has correct url/dir — only inject the tag
+          sed -i "s|url = \"git+https://github.com/Jade-ORM/jade-orm-core.git\"|url = \"git+https://github.com/Jade-ORM/jade-orm-core.git\",\\n    tag = \"${GITHUB_REF_NAME}\"|" jade-${VERSION}-1.rockspec
+          echo "----- rockspec -----"
+          head -20 jade-${VERSION}-1.rockspec
 
       - name: Inject version into _VERSION.lua
         run: |
