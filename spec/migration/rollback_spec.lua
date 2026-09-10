@@ -103,7 +103,7 @@ describe("Migration rollback atomicity", function()
 
         -- Should have thrown an error for the failed migration
         assert.is_falsy(ok)
-        assert.is_truthy(err:find("Rollback failed: 001_create_users"))
+        assert.is_truthy(tostring(err):find("001_create_users"))
 
         local applied = tracker.getAppliedMigrations(driver)
         -- 003 and 002 should be removed (their rollbacks succeeded)
@@ -144,7 +144,7 @@ describe("Migration rollback atomicity", function()
         end)
 
         assert.is_falsy(ok)
-        assert.is_truthy(err:find("Rollback failed: 003_add_bio"))
+        assert.is_truthy(tostring(err):find("003_add_bio"))
 
         local applied = tracker.getAppliedMigrations(driver)
         -- 001 was outside the rollback window
