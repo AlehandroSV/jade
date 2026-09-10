@@ -103,6 +103,12 @@ describe("Declarative .jade parser", function()
             local field = Declarative._parsedeclarativeField("author", "belongsTo(User)")
             assert.are.equal("user_id", field.relation.foreign_key)
         end)
+
+        it("does not use target FK for hasMany (parent FK at wire time)", function()
+            local field = Declarative._parsedeclarativeField("posts", "hasMany(Post)")
+            -- parent FK is user_id; parser cannot know parent yet so must not force post_id
+            assert.is_nil(field.relation.foreign_key)
+        end)
     end)
 
     describe("generateEntity from .jade", function()
@@ -153,6 +159,109 @@ describe("Declarative .jade parser", function()
             local entity = Declarative.generateEntity(schema.models.User)
             assert.is_not_nil(entity._columns.active)
             assert.is_not_nil(entity._columns.role)
+        end)
+    end)
+
+    describe("wire relations (#178)", function()
+        local sample = [[
+            model User {
+                name = String(120)!
+                posts = hasMany(Post)
+                profile = hasOne(Profile)
+            }
+            model Post {
+                title = String(255)!
+                author = belongsTo(User)
+            }
+            model Profile {
+                bio = Text()?
+                user = belongsTo(User)
+            }
+        ]]
+
+        local function generate_all(schema)
+            local entities = {}
+            for name, model in pairs(schema.models) do
+                entities[name] = Declarative.generateEntity(model)
+            end
+            Declarative.wireRelations(entities, schema.models)
+            return entities
+        end
+
+        it("wires hasMany with parent foreign_key", function()
+            local schema = Declarative.parsedeclarativeSchema(sample)
+            local entities = generate_all(schema)
+            local rel = entities.User._relations.posts
+            assert.is_not_nil(rel)
+            assert.are.equal("hasMany", rel.type)
+            assert.are.equal("posts", rel.target._table)
+            assert.are.equal("user_id", rel.foreign_key)
+        end)
+
+        it("wires hasOne with parent foreign_key", function()
+            local schema = Declarative.parsedeclarativeSchema(sample)
+            local entities = generate_all(schema)
+            local rel = entities.User._relations.profiles
+            assert.is_not_nil(rel)
+            assert.are.equal("hasOne", rel.type)
+            assert.are.equal("user_id", rel.foreign_key)
+        end)
+
+        it("wires belongsTo with target foreign_key", function()
+            local schema = Declarative.parsedeclarativeSchema(sample)
+            local entities = generate_all(schema)
+            local rel = entities.Post._relations.users
+            assert.is_not_nil(rel)
+            assert.are.equal("belongsTo", rel.type)
+            assert.are.equal("user_id", rel.foreign_key)
+            assert.are.equal("users", rel.target._table)
+        end)
+
+        it("generateEntity wires relations when entities map is provided", function()
+            local schema = Declarative.parsedeclarativeSchema(sample)
+            local Post = Declarative.generateEntity(schema.models.Post)
+            local Profile = Declarative.generateEntity(schema.models.Profile)
+            local User = Declarative.generateEntity(schema.models.User, { Post = Post, Profile = Profile })
+            assert.is_not_nil(User._relations.posts)
+            assert.is_not_nil(User._relations.profiles)
+            assert.are.equal("user_id", User._relations.posts.foreign_key)
+        end)
+
+        it("loadEntities wires User.posts and Post.author", function()
+            local path = os.tmpname() .. ".jade"
+            local f = io.open(path, "w")
+            f:write(sample)
+            f:close()
+
+            local Jade = require("jade")
+            local entities = Jade.loadEntities(path)
+            os.remove(path)
+
+            assert.is_not_nil(entities.User)
+            assert.is_not_nil(entities.Post)
+
+            local posts_rel = entities.User._relations.posts
+            assert.is_not_nil(posts_rel)
+            assert.are.equal("hasMany", posts_rel.type)
+            assert.are.equal("user_id", posts_rel.foreign_key)
+
+            local author_rel = entities.Post._relations.users
+            assert.is_not_nil(author_rel)
+            assert.are.equal("belongsTo", author_rel.type)
+            assert.are.equal("user_id", author_rel.foreign_key)
+        end)
+
+        it("generateFullModel emits parent FK for hasMany/hasOne (#173)", function()
+            local schema = Declarative.parsedeclarativeSchema(sample)
+            local code = Declarative.generateFullModel(schema.models.User, schema.models)
+            assert.is_truthy(code:find('hasMany%("Post", { foreign_key = "user_id" }%)', 1, false))
+            assert.is_truthy(code:find('hasOne%("Profile", { foreign_key = "user_id" }%)', 1, false))
+        end)
+
+        it("generateFullModel emits target FK for belongsTo (#173)", function()
+            local schema = Declarative.parsedeclarativeSchema(sample)
+            local code = Declarative.generateFullModel(schema.models.Post, schema.models)
+            assert.is_truthy(code:find('belongsTo%("User", { foreign_key = "user_id" }%)', 1, false))
         end)
     end)
 end)

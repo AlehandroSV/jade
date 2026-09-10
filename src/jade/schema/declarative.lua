@@ -229,7 +229,9 @@ function Declarative.parse(schema_def)
 end
 
 -- Generate entity from parsed model
-function Declarative.generateEntity(model)
+---@param model table Parsed model
+---@param entities? table<string, Jade.Entity> Sibling entities used to resolve relations
+function Declarative.generateEntity(model, entities)
     local columns = {}
 
     for field_name, field in pairs(model.fields) do
@@ -289,7 +291,58 @@ function Declarative.generateEntity(model)
         end
     end
 
+    -- Wire relations when sibling entities are already available
+    if entities then
+        Declarative.wireEntityRelations(entity, model, entities)
+    end
+
     return entity
+end
+
+--- Compute the foreign_key for a declarative relation (#173)
+--- belongsTo: FK on this entity pointing at the target model
+--- hasMany/hasOne: FK on the child pointing at this parent model
+---@param source_model table Parsed model that owns the relation
+---@param rel table Relation descriptor from the parser
+---@return string foreign_key
+function Declarative.relationForeignKey(source_model, rel)
+    local Inflection = require("jade.util.inflection")
+    if rel.type == "belongsTo" then
+        return rel.foreign_key or Declarative.conventions.foreignKey(rel.model)
+    end
+    return rel.foreign_key or (Inflection.singularize(source_model.tableName) .. "_id")
+end
+
+--- Wire a single entity's declarative relations against a map of entities
+---@param entity Jade.Entity Entity to attach relations to
+---@param model table Parsed model that produced the entity
+---@param entities table<string, Jade.Entity> Map of model name to entity
+function Declarative.wireEntityRelations(entity, model, entities)
+    for _, rel in pairs(model.relations or {}) do
+        local target = entities[rel.model]
+        if target then
+            local options = { foreign_key = Declarative.relationForeignKey(model, rel) }
+            if rel.type == "hasMany" then
+                entity:hasMany(target, options)
+            elseif rel.type == "hasOne" then
+                entity:hasOne(target, options)
+            elseif rel.type == "belongsTo" then
+                entity:belongsTo(target, options)
+            end
+        end
+    end
+end
+
+--- Wire all declarative relations for a map of generated entities (#178)
+---@param entities table<string, Jade.Entity> Map of model name to entity
+---@param models table Parsed models from the schema
+function Declarative.wireRelations(entities, models)
+    for name, entity in pairs(entities) do
+        local model = models[name]
+        if model then
+            Declarative.wireEntityRelations(entity, model, entities)
+        end
+    end
 end
 
 -- Generate migration from parsed schema
@@ -668,12 +721,13 @@ function Declarative.generateFullModel(model, all_models)
 
     -- Relations
     for rel_name, rel in pairs(model.relations or {}) do
+        local fk = Declarative.relationForeignKey(model, rel)
         if rel.type == "hasMany" then
-            lines[#lines + 1] = string.format('%s:hasMany("%s", { foreign_key = "%s" })', name, rel.model, Declarative.conventions.foreignKey(rel.model))
+            lines[#lines + 1] = string.format('%s:hasMany("%s", { foreign_key = "%s" })', name, rel.model, fk)
         elseif rel.type == "belongsTo" then
-            lines[#lines + 1] = string.format('%s:belongsTo("%s", { foreign_key = "%s" })', name, rel.model, Declarative.conventions.foreignKey(rel.model))
+            lines[#lines + 1] = string.format('%s:belongsTo("%s", { foreign_key = "%s" })', name, rel.model, fk)
         elseif rel.type == "hasOne" then
-            lines[#lines + 1] = string.format('%s:hasOne("%s", { foreign_key = "%s" })', name, rel.model, Declarative.conventions.foreignKey(rel.model))
+            lines[#lines + 1] = string.format('%s:hasOne("%s", { foreign_key = "%s" })', name, rel.model, fk)
         end
     end
 
@@ -1012,8 +1066,13 @@ function Declarative._parsedeclarativeField(name, def)
             type = rel_type,
             model = rel_model,
             target = rel_model,
-            foreign_key = Declarative.conventions.foreignKey(rel_model),
         }
+        -- belongsTo FK lives on this entity and points at the target model.
+        -- hasMany/hasOne FK lives on the child and points at the parent; the
+        -- parent name is unknown here, so leave foreign_key unset (#173/#178).
+        if rel_type == "belongsTo" then
+            result.relation.foreign_key = Declarative.conventions.foreignKey(rel_model)
+        end
         return result
     end
 
