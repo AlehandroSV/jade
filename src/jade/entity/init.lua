@@ -64,18 +64,20 @@ function Entity.new(table_name, columns, options)
         _scopes = {},
     }, Entity)
 
-    -- Register column names and encrypted markers
-    local Encryption = require("jade.encryption")
+    -- Register column names; load encryption only when needed
+    local Encryption
     for name, col in pairs(columns) do
         col._name = name
         col._table = table_name
         if col._encrypted then
+            Encryption = Encryption or require("jade.encryption")
             Encryption.markColumn(table_name, name)
         end
     end
 
     -- Per-entity encryption configuration
     if type(options.encryption) == "table" and next(options.encryption) then
+        Encryption = Encryption or require("jade.encryption")
         Encryption.setEntityConfig(table_name, options.encryption)
     end
 
