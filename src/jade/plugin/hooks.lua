@@ -31,6 +31,10 @@ local globalExtendEntity   = {}
 local globalExtendQuery    = {}
 local globalExtendDriver   = {}
 
+-- Per-plugin install options (from Jade.use / config). Injected into extend*
+-- context.options so each handler sees the options it was installed with.
+local pluginOptions = {}
+
 ---------------------------------------------------------------------------
 -- Internal helpers
 ---------------------------------------------------------------------------
@@ -92,6 +96,20 @@ function M.register(hook_type, handler, options)
     return handler
 end
 
+--- Store install options for a plugin so extend* hooks receive them.
+--- @param plugin_name string
+--- @param options table|nil
+function M.setPluginOptions(plugin_name, options)
+    pluginOptions[plugin_name] = options or {}
+end
+
+--- Get stored install options for a plugin.
+--- @param plugin_name string
+--- @return table options
+function M.getPluginOptions(plugin_name)
+    return pluginOptions[plugin_name] or {}
+end
+
 --- Register all hooks defined by a plugin in one call.
 --- Plugin.hooks should be:
 ---   {
@@ -101,7 +119,9 @@ end
 ---   }
 --- @param plugin_name string
 --- @param hooks_table table Mapping of hook_type -> array of handler functions
-function M.registerPlugin(plugin_name, hooks_table)
+--- @param options table|nil Install options stored for this plugin
+function M.registerPlugin(plugin_name, hooks_table, options)
+    M.setPluginOptions(plugin_name, options)
     for hook_type, handlers in pairs(hooks_table) do
         if type(handlers) == "table" then
             for _, handler in ipairs(handlers) do
@@ -132,10 +152,12 @@ function M.fire(hook_type, context, entity)
     --- Execute a flat array of handler functions
     --- @param handlers table Array of handler functions
     --- @param label string|nil Label for this batch
-    local function execFlat(handlers, label_)
+    --- @param ctx table|nil Context override (defaults to outer context)
+    local function execFlat(handlers, label_, ctx)
         if not handlers or #handlers == 0 then return end
+        local call_ctx = ctx or context
         for idx_, handler_ in ipairs(handlers) do
-            local ok_, result_ = pcall(handler_, context)
+            local ok_, result_ = pcall(handler_, call_ctx)
             all_results[#all_results + 1] = { ok = ok_, result = result_, source = label_ }
             if not ok_ then
                 -- Stop on error for safety; report which hook failed
@@ -174,7 +196,19 @@ function M.fire(hook_type, context, entity)
         end
         local global_list = rawget(M, "_globalExtend_" .. hook_type)
             or ({ extendEntity = globalExtendEntity, extendQuery = globalExtendQuery, extendDriver = globalExtendDriver })[hook_type]
-        execFlat(flattenSources(global_list), "global")
+        -- Fire per plugin so each handler receives its own install options
+        if global_list then
+            for source, handlers in pairs(global_list) do
+                local ctx = {}
+                for k, v in pairs(context) do
+                    ctx[k] = v
+                end
+                ctx.options = pluginOptions[source] or context.options or {}
+                if execFlat(handlers, source, ctx) then
+                    return all_results
+                end
+            end
+        end
     else
         -- Non-extend: fire per-entity first, then global
         local entity_scoped_ = (entity and entity._plugin_hooks) or {}
@@ -258,6 +292,7 @@ function M.unregister(plugin_name)
         globalExtendEntity = {}
         globalExtendQuery = {}
         globalExtendDriver = {}
+        pluginOptions = {}
         return
     end
 
@@ -268,6 +303,7 @@ function M.unregister(plugin_name)
     globalExtendEntity[plugin_name] = nil
     globalExtendQuery[plugin_name] = nil
     globalExtendDriver[plugin_name] = nil
+    pluginOptions[plugin_name] = nil
 end
 
 --- Clear all hooks (mainly for testing).
@@ -276,6 +312,7 @@ function M.clear()
     globalExtendEntity = {}
     globalExtendQuery = {}
     globalExtendDriver = {}
+    pluginOptions = {}
 end
 
 ---------------------------------------------------------------------------

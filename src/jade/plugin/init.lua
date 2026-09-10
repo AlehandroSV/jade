@@ -78,8 +78,11 @@ function M.use(plugin, options)
     end
 
     -- Register hooks first so setup() can fire them during execution
+    local install_opts = options or {}
     if plugin.hooks then
-        HookRegistry.registerPlugin(name, plugin.hooks)
+        HookRegistry.registerPlugin(name, plugin.hooks, install_opts)
+    else
+        HookRegistry.setPluginOptions(name, install_opts)
     end
 
     -- Call setup if provided (preserve multi-return: setup() -> ok, err)
@@ -100,7 +103,7 @@ function M.use(plugin, options)
     -- Store installed plugin
     installed[name] = {
         plugin     = plugin,
-        options    = options or {},
+        options    = install_opts,
         installed_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
     }
 

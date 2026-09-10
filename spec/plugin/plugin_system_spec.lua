@@ -203,6 +203,52 @@ describe("Plugin system", function()
             assert.is_true(called)
             assert.are.equal("pong", E:customPing())
         end)
+
+        it("passes install options into extendEntity context", function()
+            local seen_opts
+            plugin.use({
+                name = "test-extend-opts",
+                version = "1.0.0",
+                hooks = {
+                    extendEntity = function(ctx)
+                        seen_opts = ctx.options
+                    end,
+                },
+                setup = function() return true end,
+            }, { foo = 1 })
+
+            Jade.Entity("plugin_extend_opts_users", {
+                id = Jade.Integer():primaryKey(),
+            })
+            assert.is_not_nil(seen_opts)
+            assert.are.equal(1, seen_opts.foo)
+        end)
+
+        it("gives each plugin its own options in extendEntity", function()
+            local opts_a, opts_b
+            plugin.use({
+                name = "test-extend-a",
+                version = "1.0.0",
+                hooks = {
+                    extendEntity = function(ctx) opts_a = ctx.options end,
+                },
+                setup = function() return true end,
+            }, { tag = "alpha" })
+            plugin.use({
+                name = "test-extend-b",
+                version = "1.0.0",
+                hooks = {
+                    extendEntity = function(ctx) opts_b = ctx.options end,
+                },
+                setup = function() return true end,
+            }, { tag = "beta" })
+
+            Jade.Entity("plugin_extend_opts_multi", {
+                id = Jade.Integer():primaryKey(),
+            })
+            assert.are.equal("alpha", opts_a and opts_a.tag)
+            assert.are.equal("beta", opts_b and opts_b.tag)
+        end)
     end)
 
     describe("timestamps plugin", function()
