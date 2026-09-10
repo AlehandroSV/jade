@@ -74,6 +74,7 @@ build = {
         ["jade.migration.file"] = "src/jade/migration/file.lua",
         ["jade.migration.diff"] = "src/jade/migration/diff.lua",
         ["jade.migration.generator"] = "src/jade/migration/generator.lua",
+        ["jade.migration.codegen"] = "src/jade/migration/codegen.lua",
         ["jade.transaction"] = "src/jade/transaction/init.lua",
         ["jade.transaction.manager"] = "src/jade/transaction/manager.lua",
         ["jade.util.inflection"] = "src/jade/util/inflection.lua",

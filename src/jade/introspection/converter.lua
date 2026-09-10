@@ -1,3 +1,5 @@
+local Codegen = require("jade.migration.codegen")
+
 local M = {}
 
 -- Generate Jade schema from introspected database
@@ -156,7 +158,7 @@ function M.generateMigration(schema, name)
     for _, table_name in ipairs(table_names) do
         local table_def = schema.tables[table_name]
         local create_sql = M.generateCreateTable(table_name, table_def)
-        lines[#lines + 1] = "    " .. create_sql
+        lines[#lines + 1] = create_sql
         lines[#lines + 1] = ""
     end
 
@@ -164,7 +166,7 @@ function M.generateMigration(schema, name)
     for _, table_name in ipairs(table_names) do
         local table_def = schema.tables[table_name]
         for _, fk in pairs(table_def.foreign_keys) do
-            local fk_sql = M.generateForeignKey(fk)
+            local fk_sql = M.generateForeignKey(fk, table_name)
             if fk_sql then
                 lines[#lines + 1] = "    " .. fk_sql
             end
@@ -190,36 +192,31 @@ end
 
 -- Generate CREATE TABLE statement
 function M.generateCreateTable(table_name, table_def)
-    local lines = {}
-
-    lines[#lines + 1] = string.format("jade.createTable(\"%s\", {", table_name)
-
-    local col_names = {}
-    for name in pairs(table_def.columns) do
-        col_names[#col_names + 1] = name
-    end
-    table.sort(col_names)
-
-    for i, col_name in ipairs(col_names) do
+    local columns = {}
+    for _, col_name in ipairs(Codegen.sortedColumnNames(table_def.columns)) do
         local col = table_def.columns[col_name]
-        local col_def = M.generateColumn(col_name, col)
-        local suffix = i < #col_names and "," or ""
-        lines[#lines + 1] = "        " .. col_def .. suffix
+        local opts, type_name = Codegen.introspectedToOpts(col)
+        columns[#columns + 1] = {
+            name = col_name,
+            type = type_name,
+            opts = opts,
+        }
     end
-
-    lines[#lines + 1] = "    })"
-
-    return table.concat(lines, "\n")
+    return Codegen.emitCreateTable(table_name, columns, "jade", "    ")
 end
 
 -- Generate foreign key constraint
-function M.generateForeignKey(fk)
+function M.generateForeignKey(fk, table_name)
+    local assignments = {
+        string.format('column = "%s"', fk.column),
+        string.format('references_table = "%s"', fk.foreign_table),
+        string.format('references_column = "%s"', fk.foreign_column or "id"),
+    }
+    table.sort(assignments)
     return string.format(
-        "jade.addForeignKey(\"%s\", \"%s\", \"%s\", \"%s\")",
-        fk.foreign_table,
-        fk.column,
-        fk.foreign_table,
-        fk.foreign_column
+        'jade.addForeignKey("%s", { %s })',
+        table_name or fk.table or fk.foreign_table,
+        table.concat(assignments, ", ")
     )
 end
 
