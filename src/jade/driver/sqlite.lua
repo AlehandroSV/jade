@@ -569,11 +569,16 @@ end
 
 --- Execute a function within a database transaction.
 -- Automatically commits on success, rolls back on error.
--- Uses the shared connection to ensure all operations are within the same transaction.
--- SQLite supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
+-- With a connection pool, the entire fn is bound to one leased connection so
+-- nested driver:execute calls stay atomic. Without a pool, uses the shared
+-- connection. SQLite supports transactional DDL (CREATE TABLE, ALTER TABLE, etc.).
 -- @param fn function The function to execute within the transaction
 -- @return boolean true if the transaction was committed successfully
 function SQLite:transaction(fn)
+    if self._pool then
+        return self._pool:transaction(fn)
+    end
+
     self:_ensureConnected()
 
     local conn = self._conn

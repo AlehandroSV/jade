@@ -775,7 +775,9 @@ end
 
 --- Execute a function within a database transaction.
 -- Automatically commits on success, rolls back on error.
--- Uses the shared connection to ensure all operations are within the same transaction.
+-- With a connection pool, the entire fn is bound to one leased connection so
+-- nested driver:execute calls stay atomic. Without a pool, uses the shared
+-- connection.
 --
 -- IMPORTANT MySQL LIMITATION: DDL statements (CREATE TABLE, DROP TABLE, ALTER TABLE,
 -- TRUNCATE TABLE, RENAME TABLE) cause implicit commits in MySQL and CANNOT be rolled
@@ -786,6 +788,10 @@ end
 -- @param fn function The function to execute within the transaction
 -- @return boolean true if the transaction was committed successfully
 function MySQL:transaction(fn)
+    if self._pool then
+        return self._pool:transaction(fn)
+    end
+
     self:_ensureConnected()
 
     local conn = self._conn
