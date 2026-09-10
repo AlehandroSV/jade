@@ -180,6 +180,7 @@ local test_files = {
     "migration/rollback_spec.lua",
     "migration/api_spec.lua",
     "migration/file_spec.lua",
+    "seed/seed_spec.lua",
     "transaction/transaction_spec.lua",
     "security/sanitizer_spec.lua",
     "security/validator_spec.lua",

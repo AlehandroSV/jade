@@ -98,6 +98,17 @@ local function setenv(name, value)
     end
 end
 
+--- Resolve MYSQL_OPT_SSL_MODE from config.ssl_verify.
+--- false/nil → REQUIRED (encrypt, no cert verify); true → VERIFY_IDENTITY.
+---@param ssl_verify boolean|nil
+---@return string
+function MySQL.resolveSSLMode(ssl_verify)
+    if ssl_verify then
+        return "VERIFY_IDENTITY"
+    end
+    return "REQUIRED"
+end
+
 -- Set SSL environment variables for MySQL C API
 -- The MySQL client library reads these automatically before connecting
 function MySQL:_setSSLEnv()
@@ -105,17 +116,11 @@ function MySQL:_setSSLEnv()
 
     local saved = {}
     local ssl_vars = {
-        { env = "MYSQL_OPT_SSL_MODE", value = "REQUIRED" },
+        { env = "MYSQL_OPT_SSL_MODE", value = MySQL.resolveSSLMode(self._config.ssl_verify) },
         { env = "MYSQL_SSL_CA", value = self._config.ssl_ca },
         { env = "MYSQL_SSL_CERT", value = self._config.ssl_cert },
         { env = "MYSQL_SSL_KEY", value = self._config.ssl_key },
     }
-
-    if self._config.ssl_verify == false then
-        ssl_vars[1].value = "VERIFY_CA"
-    elseif self._config.ssl_verify then
-        ssl_vars[1].value = "VERIFY_IDENTITY"
-    end
 
     for _, var in ipairs(ssl_vars) do
         if var.value then
@@ -775,7 +780,9 @@ end
 
 --- Execute a function within a database transaction.
 -- Automatically commits on success, rolls back on error.
--- Uses the shared connection to ensure all operations are within the same transaction.
+-- With a connection pool, the entire fn is bound to one leased connection so
+-- nested driver:execute calls stay atomic. Without a pool, uses the shared
+-- connection.
 --
 -- IMPORTANT MySQL LIMITATION: DDL statements (CREATE TABLE, DROP TABLE, ALTER TABLE,
 -- TRUNCATE TABLE, RENAME TABLE) cause implicit commits in MySQL and CANNOT be rolled
@@ -786,6 +793,10 @@ end
 -- @param fn function The function to execute within the transaction
 -- @return boolean true if the transaction was committed successfully
 function MySQL:transaction(fn)
+    if self._pool then
+        return self._pool:transaction(fn)
+    end
+
     self:_ensureConnected()
 
     local conn = self._conn

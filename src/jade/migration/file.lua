@@ -1,3 +1,5 @@
+local errors = require("jade.errors")
+
 local M = {}
 
 local function getMigrationsDir()
@@ -7,39 +9,55 @@ end
 local function sanitizePath(path)
     -- Only allow alphanumeric, underscores, hyphens, dots, slashes, and colons (for Windows drives)
     if not path:match("^[a-zA-Z0-9_%./\\:%-]+$") then
-        error("Invalid path: contains unsafe characters")
+        errors.raise(errors.INVALID_INPUT, {
+            details = "Invalid path: contains unsafe characters",
+        }, 2)
     end
     return path
 end
 
 -- Validate and sanitize file path to prevent directory traversal and arbitrary file loading
-local function validatePath(path, allowedExtension)
+-- Exported as M.validatePath for testability
+function M.validatePath(path, allowedExtension)
+    local function reject()
+        errors.raise(errors.INVALID_INPUT, { details = "rejected by security policy" }, 3)
+    end
     if type(path) ~= "string" or path == "" then
-        error("Invalid path: must be a non-empty string")
+        reject()
     end
-    
+
     -- Reject paths with null bytes
-    if path:find("\0") then
-        error("Invalid path: contains null byte")
+    if path:find("\0", 1, true) then
+        reject()
     end
-    
-    -- Reject directory traversal attempts
-    if path:match("%.%.%/?") or path:match("/%.%.") then
-        error("Invalid path: directory traversal not allowed")
+
+    -- Reject directory traversal attempts (.. in any context: ../, ..\, etc.)
+    if path:find("..", 1, true) then
+        reject()
     end
-    
-    -- Reject absolute paths outside current directory context
-    -- Allow relative paths only
-    if path:match("^/") or (path:match("^%a:") and not path:match("^%a:[\\/]")) then
-        error("Invalid path: use relative paths only")
+
+    -- Reject absolute paths: Unix /, Windows drive (C: or C:\), UNC \\
+    if path:match("^/") or path:match("^%a:") or path:match("^\\\\") then
+        reject()
     end
-    
-    -- Validate extension
+
+    -- Validate extension (allowedExtension must be alphanumeric)
     if allowedExtension and not path:match("%." .. allowedExtension .. "$") then
-        error("Invalid path: must have ." .. allowedExtension .. " extension")
+        reject()
     end
-    
+
     return true
+end
+
+-- Local alias for internal call sites
+local validatePath = M.validatePath
+
+-- Whitelist migration names: alphanumeric, underscore, hyphen only (#181)
+local function validateMigrationName(name)
+    if type(name) ~= "string" or name == "" or not name:match("^[%w%-%_]+$") then
+        errors.raise(errors.INVALID_INPUT, { details = "rejected by security policy" }, 3)
+    end
+    return name
 end
 
 function M.listFiles()
@@ -118,12 +136,15 @@ function M.load(path)
     validatePath(path, "lua")
     local loader, err = loadfile(path)
     if not loader then
-        error("Failed to load migration file: " .. tostring(err))
+        errors.raise(errors.MIGRATION_FILE_INVALID, {
+            error = tostring(err),
+        }, 2)
     end
     return loader()
 end
 
 function M.writeMigration(name, up_fn, down_fn)
+    validateMigrationName(name)
     local dir = getMigrationsDir()
     local timestamp = os.date("%Y%m%d%H%M%S")
     local filename = timestamp .. "_" .. name .. ".lua"
@@ -147,7 +168,9 @@ return M
 
     local file = io.open(path, "w")
     if not file then
-        error("Failed to create migration file: " .. path)
+        errors.raise(errors.MIGRATION_FILE_INVALID, {
+            error = "Failed to create migration file: " .. path,
+        }, 2)
     end
     file:write(content)
     file:close()

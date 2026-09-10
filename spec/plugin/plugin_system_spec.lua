@@ -80,6 +80,108 @@ describe("Plugin system", function()
         end)
     end)
 
+    describe("unregister (#171)", function()
+        it("clears regular hooks under each type axis", function()
+            local fired = 0
+            Hooks.register("beforeQuery", function() fired = fired + 1 end, { plugin = "axis-unreg" })
+            Hooks.register("afterCreate", function() fired = fired + 10 end, { plugin = "axis-unreg" })
+
+            Hooks.unregister("axis-unreg")
+
+            Hooks.fire("beforeQuery")
+            Hooks.fire("afterCreate")
+            assert.are.equal(0, fired, "regular hooks must not fire after unregister")
+        end)
+
+        it("keeps other plugins' regular hooks", function()
+            local keep, drop = 0, 0
+            Hooks.register("beforeQuery", function() keep = keep + 1 end, { plugin = "keep-me" })
+            Hooks.register("beforeQuery", function() drop = drop + 1 end, { plugin = "drop-me" })
+
+            Hooks.unregister("drop-me")
+            Hooks.fire("beforeQuery")
+
+            assert.are.equal(1, keep, "other plugin hooks must survive")
+            assert.are.equal(0, drop, "unregistered plugin hooks must be gone")
+        end)
+
+        it("clears globalExtend* for the plugin", function()
+            local extend_fired = false
+            Hooks.register("extendEntity", function() extend_fired = true end, { plugin = "extend-unreg" })
+            Hooks.unregister("extend-unreg")
+            Hooks.fire("extendEntity")
+            assert.is_false(extend_fired)
+        end)
+    end)
+
+    describe("unloadPlugin removes behavior (#171)", function()
+        it("use → unload → fire() finds nothing", function()
+            local fired = 0
+            plugin.use({
+                name = "unload-hooks",
+                version = "1.0.0",
+                hooks = {
+                    beforeQuery = function() fired = fired + 1 end,
+                    extendEntity = function() fired = fired + 100 end,
+                },
+                setup = function() return true end,
+            })
+
+            -- Sanity: hooks are live after use()
+            Hooks.fire("beforeQuery")
+            assert.are.equal(1, fired, "hooks must fire while installed")
+
+            local ok, err = plugin.unloadPlugin("unload-hooks")
+            assert.is_true(ok)
+            assert.is_nil(err)
+
+            Hooks.fire("beforeQuery")
+            Hooks.fire("extendEntity")
+            assert.are.equal(1, fired, "hooks must not fire after unloadPlugin")
+        end)
+    end)
+
+    describe("setup failure unregisters hooks (#171)", function()
+        it("register hooks then setup returns false → hooks are cleared", function()
+            local fired = 0
+            local ok, err = plugin.use({
+                name = "fail-setup-hooks",
+                version = "1.0.0",
+                hooks = {
+                    beforeQuery = function() fired = fired + 1 end,
+                },
+                setup = function()
+                    return false, "setup deliberately failed"
+                end,
+            })
+
+            assert.is_false(ok)
+            assert.is_truthy(tostring(err):match("setup deliberately failed"))
+
+            Hooks.fire("beforeQuery")
+            assert.are.equal(0, fired, "hooks must be unregistered when setup fails")
+        end)
+
+        it("register hooks then setup errors → hooks are cleared", function()
+            local fired = 0
+            local ok = plugin.use({
+                name = "error-setup-hooks",
+                version = "1.0.0",
+                hooks = {
+                    beforeQuery = function() fired = fired + 1 end,
+                },
+                setup = function()
+                    error("setup threw")
+                end,
+            })
+
+            assert.is_false(ok)
+
+            Hooks.fire("beforeQuery")
+            assert.are.equal(0, fired, "hooks must be unregistered when setup raises")
+        end)
+    end)
+
     describe("extendEntity", function()
         it("fires hooks when entity is created", function()
             local called = false

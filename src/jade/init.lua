@@ -349,6 +349,8 @@ function Jade.loadEntities(filepath)
             entities[name]:configure(driver)
         end
     end
+    -- Relations need every target entity to exist first (#178)
+    Jade.Declarative.wireRelations(entities, schema.models)
     return entities
 end
 
