@@ -9,17 +9,53 @@ describe("Migration API", function()
         local migrations_table = {}
         local driver = {
             _migrations = migrations_table,
+            _driver_type = "sqlite",
         }
 
+        function driver:mapType(column_type)
+            local map = {
+                string = "TEXT",
+                integer = "INTEGER",
+                timestamp = "TEXT",
+            }
+            return map[column_type.type] or "TEXT"
+        end
+
+        function driver:supportsAutoIncrement()
+            return true
+        end
+
+        function driver:autoIncrementKeyword()
+            return "AUTOINCREMENT"
+        end
+
+        function driver:quoteIdentifier(name)
+            return "`" .. name:gsub("`", "``") .. "`"
+        end
+
         function driver:execute(sql, bindings)
+            local function row_name()
+                if bindings and bindings[1] then
+                    return bindings[1]
+                end
+                return sql:match("VALUES%s*%(%s*'([^']*)'") or sql:match("name%s*=%s*'([^']*)'")
+            end
             if sql:match("CREATE TABLE") then
                 return {}
+            elseif sql:match("ALTER TABLE") then
+                return {}
+            elseif sql:match("SELECT jade_version") then
+                return {}
             elseif sql:match("INSERT INTO _jade_migrations") then
-                migrations_table[#migrations_table + 1] = { name = bindings[1] }
+                local name = row_name()
+                if name then name = name:gsub("''", "'") end
+                migrations_table[#migrations_table + 1] = { name = name }
                 return {}
             elseif sql:match("DELETE FROM _jade_migrations") then
+                local name = row_name()
+                if name then name = name:gsub("''", "'") end
                 for i, row in ipairs(migrations_table) do
-                    if row.name == bindings[1] then
+                    if row.name == name then
                         table.remove(migrations_table, i)
                         break
                     end
